@@ -2,77 +2,64 @@
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using rotaryproject.Data.Models;
-using Microsoft.AspNetCore.Identity; // Add this for IdentityUser (if not using ApplicationUser directly)
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore; // Add this for IdentityDbContext
-namespace rotaryproject.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations.Schema;
 
-public partial class RotaryEngineDbContext : IdentityDbContext<ApplicationUser> // <<< MODIFIED HERE
+namespace rotaryproject.Data
 {
-    public RotaryEngineDbContext()
+    public partial class RotaryEngineDbContext : IdentityDbContext<ApplicationUser>
     {
-    }
-
-    public RotaryEngineDbContext(DbContextOptions<RotaryEngineDbContext> options)
-        : base(options)
-    {
-    }
-
-    public virtual DbSet<Part> Parts { get; set; }
-    public virtual DbSet<PartCategory> PartCategories { get; set; }
-
-    public virtual DbSet<UserSavedBuild> UserSavedBuilds { get; set; }
-   // In your RotaryEngineDbContext.cs
-
-protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
-{
-    // Intentionally left blank or only calls base.OnConfiguring if needed.
-    // Since Program.cs configures the DbContext with the connection string,
-    // we don't need to (and shouldn't) configure it here with a hardcoded string.
-    // This will remove the CS1030 warning.
-
-    // If you want to be explicit about not doing anything if already configured:
-    // if (!optionsBuilder.IsConfigured)
-    // {
-    //     // This block would now typically be empty or log an error if somehow not configured by Program.cs,
-    //     // but for most cases, an empty method is fine.
-    // }
-}
-    protected override void OnModelCreating(ModelBuilder modelBuilder)
-    {
-        base.OnModelCreating(modelBuilder);
-
-        modelBuilder.Entity<Part>(entity =>
+        public RotaryEngineDbContext(DbContextOptions<RotaryEngineDbContext> options)
+            : base(options)
         {
-            entity.HasKey(e => e.PartId).HasName("PK__Parts__7C3F0D3095AB3286");
+        }
 
-            entity.HasOne(d => d.Category).WithMany(p => p.Parts)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("FK__Parts__CategoryI__3B75D760");
-        });
+        // DbSets for all your application's tables
+        public virtual DbSet<Part> Parts { get; set; }
+        public virtual DbSet<PartCategory> PartCategories { get; set; }
+        public virtual DbSet<UserSavedBuild> UserSavedBuilds { get; set; }
+        public virtual DbSet<EngineFamily> EngineFamilies { get; set; }
+        public virtual DbSet<PartFitment> PartFitments { get; set; }
 
-        modelBuilder.Entity<PartCategory>(entity =>
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
-            entity.HasKey(e => e.CategoryId).HasName("PK__PartCate__19093A2B0B380B12");
-        });
+            // This is required and must be called first.
+            base.OnModelCreating(modelBuilder); 
 
-        modelBuilder.Entity<UserSavedBuild>(entity =>
+            // --- Compatibility System Configuration ---
+            // This is the correct place for many-to-many configuration.
+            modelBuilder.Entity<PartFitment>()
+                .HasKey(pf => new { pf.PartId, pf.EngineFamilyId });
+
+            modelBuilder.Entity<PartFitment>()
+                .HasOne(pf => pf.Part)
+                .WithMany(p => p.Fitments)
+                .HasForeignKey(pf => pf.PartId);
+
+            modelBuilder.Entity<PartFitment>()
+                .HasOne(pf => pf.EngineFamily)
+                .WithMany(ef => ef.PartFitments)
+                .HasForeignKey(pf => pf.EngineFamilyId);
+
+            
+            // --- UserSavedBuild Configuration ---
+            modelBuilder.Entity<UserSavedBuild>(entity =>
             {
                 entity.HasKey(e => e.UserSavedBuildId);
-
                 entity.Property(e => e.BuildName).IsRequired().HasMaxLength(100);
-                entity.Property(e => e.BuildConfigurationString).IsRequired(); // Can be long, so no MaxLength by default
+                entity.Property(e => e.BuildConfigurationString).IsRequired();
                 entity.Property(e => e.UserId).IsRequired();
 
-                // Define the relationship to ApplicationUser
-                // An ApplicationUser can have many UserSavedBuilds
-                // A UserSavedBuild belongs to one ApplicationUser
                 entity.HasOne(d => d.User)
-                      .WithMany(p => p.SavedBuilds) // Corresponds to ICollection in ApplicationUser
+                      .WithMany(p => p.SavedBuilds)
                       .HasForeignKey(d => d.UserId)
-                      .OnDelete(DeleteBehavior.Cascade); // Or DeleteBehavior.ClientSetNull if you prefer
+                      .OnDelete(DeleteBehavior.Cascade);
             });
-        OnModelCreatingPartial(modelBuilder);
+            
+            // The redundant configurations for Part and PartCategory have been removed,
+            // as they are handled by the attributes in the model files.
+        }
     }
-
-    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }

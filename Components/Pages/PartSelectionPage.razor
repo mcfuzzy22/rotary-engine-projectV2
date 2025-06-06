@@ -107,7 +107,6 @@ else if (currentCategory != null)
                                             @if (!string.IsNullOrEmpty(part.SizeMm)) { <li><strong>Size:</strong> @part.SizeMm</li> }
                                             @if (part.ManufacturingYear.HasValue) { <li><strong>Year:</strong> @part.ManufacturingYear</li> }
                                             @if (part.SealAmount.HasValue) { <li><strong>Seal Qty:</strong> @part.SealAmount</li> }
-                                            @if (!string.IsNullOrEmpty(part.EngineCompatibility)) { <li><strong>Engine:</strong> @part.EngineCompatibility</li> }
                                         </ul>
                                         @if (part.Rating.HasValue) { 
                                             <small class="text-warning">Rating: @part.Rating.Value.ToString("0.0") stars (@(part.RatingCount ?? 0) reviews)</small> 

@@ -12,8 +12,8 @@ using rotaryproject.Data;
 namespace rotaryproject.Migrations
 {
     [DbContext(typeof(RotaryEngineDbContext))]
-    [Migration("20250606160243_poopx2")]
-    partial class poopx2
+    [Migration("20250606210200_compatitiblity1")]
+    partial class compatitiblity1
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -227,50 +227,34 @@ namespace rotaryproject.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
-            modelBuilder.Entity("rotaryproject.Data.Models.CompatibilityRule", b =>
+            modelBuilder.Entity("rotaryproject.Data.Models.EngineFamily", b =>
                 {
-                    b.Property<int>("RuleId")
+                    b.Property<int>("EngineFamilyId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("RuleID");
+                        .HasColumnType("int");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("RuleId"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("EngineFamilyId"));
 
                     b.Property<string>("Description")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
 
-                    b.Property<bool?>("IsCompatible")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bit")
-                        .HasDefaultValue(true);
+                    b.Property<string>("FamilyCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
-                    b.Property<int>("PartAId")
-                        .HasColumnType("int")
-                        .HasColumnName("PartA_ID");
+                    b.HasKey("EngineFamilyId");
 
-                    b.Property<int>("PartBId")
-                        .HasColumnType("int")
-                        .HasColumnName("PartB_ID");
-
-                    b.HasKey("RuleId")
-                        .HasName("PK__Compatib__110458C2D19B7CFD");
-
-                    b.HasIndex(new[] { "PartAId" }, "IX_CompatibilityRules_PartA_ID");
-
-                    b.HasIndex(new[] { "PartBId" }, "IX_CompatibilityRules_PartB_ID");
-
-                    b.HasIndex(new[] { "PartAId", "PartBId" }, "UQ__Compatib__C9D6D737D786A5C9")
-                        .IsUnique();
-
-                    b.ToTable("CompatibilityRules");
+                    b.ToTable("EngineFamilies");
                 });
 
             modelBuilder.Entity("rotaryproject.Data.Models.Part", b =>
                 {
                     b.Property<int>("PartId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("PartID");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PartId"));
 
@@ -291,10 +275,6 @@ namespace rotaryproject.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<string>("EngineCompatibility")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
                     b.Property<string>("ImagePath")
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
@@ -305,11 +285,6 @@ namespace rotaryproject.Migrations
                     b.Property<string>("Material")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("ModelPath")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("nvarchar(255)");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -344,8 +319,7 @@ namespace rotaryproject.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
 
-                    b.HasKey("PartId")
-                        .HasName("PK__Parts__7C3F0D3095AB3286");
+                    b.HasKey("PartId");
 
                     b.HasIndex("CategoryId");
 
@@ -376,8 +350,7 @@ namespace rotaryproject.Migrations
                     b.Property<int?>("ParentCategoryId")
                         .HasColumnType("int");
 
-                    b.HasKey("CategoryId")
-                        .HasName("PK__PartCate__19093A2B0B380B12");
+                    b.HasKey("CategoryId");
 
                     b.HasIndex("ParentCategoryId");
 
@@ -387,39 +360,19 @@ namespace rotaryproject.Migrations
                     b.ToTable("PartCategories");
                 });
 
-            modelBuilder.Entity("rotaryproject.Data.Models.PartStat", b =>
+            modelBuilder.Entity("rotaryproject.Data.Models.PartFitment", b =>
                 {
-                    b.Property<int>("PartStatId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("PartStatID");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("PartStatId"));
-
                     b.Property<int>("PartId")
-                        .HasColumnType("int")
-                        .HasColumnName("PartID");
+                        .HasColumnType("int");
 
-                    b.Property<string>("StatName")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<int>("EngineFamilyId")
+                        .HasColumnType("int");
 
-                    b.Property<string>("StatValue")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.HasKey("PartId", "EngineFamilyId");
 
-                    b.Property<string>("Unit")
-                        .HasMaxLength(20)
-                        .HasColumnType("nvarchar(20)");
+                    b.HasIndex("EngineFamilyId");
 
-                    b.HasKey("PartStatId")
-                        .HasName("PK__PartStat__AFCC32BA505FA52A");
-
-                    b.HasIndex(new[] { "PartId" }, "IX_PartStats_PartID");
-
-                    b.ToTable("PartStats");
+                    b.ToTable("PartFitments");
                 });
 
             modelBuilder.Entity("rotaryproject.Data.Models.UserSavedBuild", b =>
@@ -507,32 +460,13 @@ namespace rotaryproject.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("rotaryproject.Data.Models.CompatibilityRule", b =>
-                {
-                    b.HasOne("rotaryproject.Data.Models.Part", "PartA")
-                        .WithMany("CompatibilityRulePartAs")
-                        .HasForeignKey("PartAId")
-                        .IsRequired()
-                        .HasConstraintName("FK__Compatibi__PartA__4316F928");
-
-                    b.HasOne("rotaryproject.Data.Models.Part", "PartB")
-                        .WithMany("CompatibilityRulePartBs")
-                        .HasForeignKey("PartBId")
-                        .IsRequired()
-                        .HasConstraintName("FK__Compatibi__PartB__440B1D61");
-
-                    b.Navigation("PartA");
-
-                    b.Navigation("PartB");
-                });
-
             modelBuilder.Entity("rotaryproject.Data.Models.Part", b =>
                 {
                     b.HasOne("rotaryproject.Data.Models.PartCategory", "Category")
                         .WithMany("Parts")
                         .HasForeignKey("CategoryId")
-                        .IsRequired()
-                        .HasConstraintName("FK__Parts__CategoryI__3B75D760");
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Category");
                 });
@@ -546,14 +480,21 @@ namespace rotaryproject.Migrations
                     b.Navigation("ParentCategory");
                 });
 
-            modelBuilder.Entity("rotaryproject.Data.Models.PartStat", b =>
+            modelBuilder.Entity("rotaryproject.Data.Models.PartFitment", b =>
                 {
+                    b.HasOne("rotaryproject.Data.Models.EngineFamily", "EngineFamily")
+                        .WithMany("PartFitments")
+                        .HasForeignKey("EngineFamilyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("rotaryproject.Data.Models.Part", "Part")
-                        .WithMany("PartStats")
+                        .WithMany("Fitments")
                         .HasForeignKey("PartId")
                         .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("FK__PartStats__PartI__3E52440B");
+                        .IsRequired();
+
+                    b.Navigation("EngineFamily");
 
                     b.Navigation("Part");
                 });
@@ -574,13 +515,14 @@ namespace rotaryproject.Migrations
                     b.Navigation("SavedBuilds");
                 });
 
+            modelBuilder.Entity("rotaryproject.Data.Models.EngineFamily", b =>
+                {
+                    b.Navigation("PartFitments");
+                });
+
             modelBuilder.Entity("rotaryproject.Data.Models.Part", b =>
                 {
-                    b.Navigation("CompatibilityRulePartAs");
-
-                    b.Navigation("CompatibilityRulePartBs");
-
-                    b.Navigation("PartStats");
+                    b.Navigation("Fitments");
                 });
 
             modelBuilder.Entity("rotaryproject.Data.Models.PartCategory", b =>

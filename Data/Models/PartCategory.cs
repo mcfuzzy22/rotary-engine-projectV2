@@ -24,7 +24,7 @@ public partial class PartCategory
 
     // Navigation property to the parent category
     [ForeignKey("ParentCategoryId")]
-    public virtual PartCategory? ParentCategory { get; set; }
+        public virtual PartCategory? ParentCategory { get; set; }
 
     // Navigation property to the sub-categories
     public virtual ICollection<PartCategory> SubCategories { get; set; } = new List<PartCategory>();

@@ -7,7 +7,8 @@ namespace rotaryproject.Services // Or rotaryproject.Data or your preferred name
     public class EngineBuildStateService
     {
         public EngineBuildConfiguration CurrentBuild { get; private set; }
-
+        public HashSet<int> ExpandedCategoryIds { get; set; } = new HashSet<int>();
+        public event Action? OnChange;
         public EngineBuildStateService()
         {
             CurrentBuild = new EngineBuildConfiguration();
@@ -23,5 +24,20 @@ namespace rotaryproject.Services // Or rotaryproject.Data or your preferred name
             Console.WriteLine("EngineBuildStateService: Build cleared.");
             // You might need an event here if other components need to know it changed.
         }
+        public void SelectPart(int categoryId, Part? part)
+        {
+            CurrentBuild.SelectPart(categoryId, part);
+            NotifyStateChanged();
+        }
+        
+        public void ResetBuild()
+        {
+            CurrentBuild = new EngineBuildConfiguration();
+            // Also reset the expansion state when starting a new build
+            ExpandedCategoryIds.Clear();
+            NotifyStateChanged();
+        }
+
+        private void NotifyStateChanged() => OnChange?.Invoke();
     }
 }

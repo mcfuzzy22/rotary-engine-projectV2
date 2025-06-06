@@ -387,3 +387,4 @@ C:\Users\mcfuz\rotaryproject2\rotary-engine-project\obj\Debug\net9.0\refint\rota
 C:\Users\mcfuz\rotaryproject2\rotary-engine-project\obj\Debug\net9.0\rotaryproject.pdb
 C:\Users\mcfuz\rotaryproject2\rotary-engine-project\obj\Debug\net9.0\rotaryproject.genruntimeconfig.cache
 C:\Users\mcfuz\rotaryproject2\rotary-engine-project\obj\Debug\net9.0\ref\rotaryproject.dll
+C:\Users\mcfuz\rotaryproject2\rotary-engine-project\obj\Debug\net9.0\rotaryproject.sourcelink.json

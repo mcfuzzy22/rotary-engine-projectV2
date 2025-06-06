@@ -93,7 +93,7 @@ else
                     {
                         foreach (var category in categories.OrderBy(c => c.Name))
                         {
-                            var isExpanded = expandedCategoryIds.Contains(category.CategoryId);
+                            var isExpanded = BuildStateService.ExpandedCategoryIds.Contains(category.CategoryId);
                             var hasChildren = category.SubCategories != null && category.SubCategories.Any();
 
                             <tr>
@@ -220,7 +220,6 @@ else
     public int? PassedSelectedPartId { get; set; }
 
     private List<PartCategory> topLevelCategories = new List<PartCategory>();
-    private HashSet<int> expandedCategoryIds = new HashSet<int>();
     private bool isLoading = true;
 
     private string? shareableLink;
@@ -232,21 +231,17 @@ else
     private string ReturnUrlForLogin => Navigation.Uri;
 
     private void ToggleExpansion(int categoryId)
+{
+    if (BuildStateService.ExpandedCategoryIds.Contains(categoryId))
     {
-        Console.WriteLine("ToggleExpansion - ENTERED.");
-        if (expandedCategoryIds.Contains(categoryId))
-        {
-            expandedCategoryIds.Remove(categoryId);
-        }
-        else
-        {
-            expandedCategoryIds.Add(categoryId);
-        }
-        // This is the critical fix: explicitly tell Blazor to re-render the component.
-        StateHasChanged();
+        BuildStateService.ExpandedCategoryIds.Remove(categoryId);
     }
-
-    protected override async Task OnInitializedAsync()
+    else
+    {
+        BuildStateService.ExpandedCategoryIds.Add(categoryId);
+    }
+    StateHasChanged(); // This ensures the UI updates instantly
+}    protected override async Task OnInitializedAsync()
     {
         isLoading = true;
         try
@@ -367,65 +362,114 @@ else
     }
 
     protected override async Task OnParametersSetAsync()
+{
+    // Log entry with current parameter values from the URL
+    Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - ENTERED. " +
+                      $"BuildString: '{IncomingBuildConfigurationString}', " +
+                      $"PassedCatId: {PassedCategoryId}, PassedSelPartId: {PassedSelectedPartId}");
+
+    // Check if this execution is due to our own navigation to clean the URL
+    // If the query parameters that trigger processing are now gone, we assume the state
+    // is already correctly in BuildStateService.CurrentBuild from a previous pass.
+    if (string.IsNullOrWhiteSpace(IncomingBuildConfigurationString) && !PassedSelectedPartId.HasValue)
     {
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - ENTERED. BuildString: '{IncomingBuildConfigurationString}', PassedCatId: {PassedCategoryId}, PassedSelPartId: {PassedSelectedPartId}");
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - No new incoming build/selection parameters to process. UI will render from current BuildStateService state.");
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - EXITED (no action needed).");
+        // Ensure UI reflects the current state from the service, especially if it was just populated
+        // StateHasChanged(); // Might be needed if other parts of the page depend on this lifecycle running
+        return;
+    }
 
-        if (string.IsNullOrWhiteSpace(IncomingBuildConfigurationString) && !PassedSelectedPartId.HasValue)
+    // Flag to indicate if we processed parameters in this cycle and will navigate
+    bool processedAndWillNavigate = false;
+
+    // 1. Process incoming shared build configuration string (e.g., from ?build=1-101_2-205)
+    if (!string.IsNullOrWhiteSpace(IncomingBuildConfigurationString))
+    {
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing build string: {IncomingBuildConfigurationString}");
+        processedAndWillNavigate = true;
+        BuildStateService.CurrentBuild.SelectedParts.Clear(); // Reset for the new build from link
+
+        var categoryPartPairs = IncomingBuildConfigurationString.Split('_');
+        foreach (var pairString in categoryPartPairs)
         {
-            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - No new incoming build/selection parameters to process.");
-            return;
-        }
-
-        bool processedAndWillNavigate = false;
-
-        if (!string.IsNullOrWhiteSpace(IncomingBuildConfigurationString))
-        {
-            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing build string: {IncomingBuildConfigurationString}");
-            processedAndWillNavigate = true;
-            BuildStateService.CurrentBuild.SelectedParts.Clear();
-
-            var categoryPartPairs = IncomingBuildConfigurationString.Split('_');
-            foreach (var pairString in categoryPartPairs)
+            var ids = pairString.Split('-');
+            if (ids.Length == 2 && int.TryParse(ids[0], out int categoryId) && int.TryParse(ids[1], out int partIdVal))
             {
-                var ids = pairString.Split('-');
-                if (ids.Length == 2 && int.TryParse(ids[0], out int categoryId) && int.TryParse(ids[1], out int partIdVal))
+                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Parsed from build string - CategoryId: {categoryId}, PartId: {partIdVal}");
+                if (DbContext.Parts != null)
                 {
-                    if (DbContext.Parts != null)
+                    // Ensure PartId and CategoryId casing matches your Part.cs model in the LINQ query
+                    var part = await DbContext.Parts
+                                        .Include(p => p.Category)
+                                        .FirstOrDefaultAsync(p => p.PartId == partIdVal && p.CategoryId == categoryId);
+                    if (part != null)
                     {
-                        var part = await DbContext.Parts
-                                          .Include(p => p.CategoryId)
-                                          .FirstOrDefaultAsync(p => p.PartId == partIdVal && p.CategoryId == categoryId);
-                        if (part != null)
-                        {
-                            BuildStateService.CurrentBuild.SelectPart(categoryId, part);
-                        }
+                        BuildStateService.CurrentBuild.SelectPart(categoryId, part); // Update service state
+                        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Loaded Part '{part.Name}' (ID: {part.PartId}) for CategoryId {categoryId} from build string into service.");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): PartId {partIdVal} for CategoryId {categoryId} (build string) not found or category mismatch in DB.");
                     }
                 }
             }
-        }
-        else if (PassedSelectedPartId.HasValue && PassedCategoryId.HasValue)
-        {
-            processedAndWillNavigate = true;
-            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing direct selection - CategoryID: {PassedCategoryId.Value}, PartID: {PassedSelectedPartId.Value}");
-            if (DbContext.Parts != null)
+            else
             {
-                var part = await DbContext.Parts
-                                    .Include(p => p.CategoryId)
-                                    .FirstOrDefaultAsync(p => p.PartId == PassedSelectedPartId.Value);
-
-                if (part != null && part.CategoryId == PassedCategoryId.Value)
-                {
-                    BuildStateService.CurrentBuild.SelectPart(PassedCategoryId.Value, part);
-                }
+                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Could not parse pair string: '{pairString}' from build string.");
             }
         }
-
-        if (processedAndWillNavigate)
+    }
+    // 2. Process incoming direct part selection (e.g., from PartSelectionPage)
+    // This runs if no build string was processed in this call.
+    else if (PassedSelectedPartId.HasValue && PassedCategoryId.HasValue)
+    {
+        processedAndWillNavigate = true;
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing direct selection - CategoryID: {PassedCategoryId.Value}, PartID: {PassedSelectedPartId.Value}");
+        if (DbContext.Parts != null)
         {
-            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Parameters processed. Updating UI. SelectedParts count in service: {BuildStateService.CurrentBuild.SelectedParts.Count}");
-            Navigation.NavigateTo("/enginebuilder", replace: true);
+            var part = await DbContext.Parts
+                                .Include(p => p.Category)
+                                .FirstOrDefaultAsync(p => p.PartId == PassedSelectedPartId.Value);
+
+            if (part != null && part.CategoryId == PassedCategoryId.Value) // Ensure part belongs to the passed category
+            {
+                BuildStateService.CurrentBuild.SelectPart(PassedCategoryId.Value, part); // Update service state
+                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Part '{part.Name}' (ID: {part.PartId}) selected for category {PassedCategoryId.Value} into service.");
+            }
+            else
+            {
+                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Selected part with ID {PassedSelectedPartId.Value} not found or category mismatch for CategoryId {PassedCategoryId.Value}.");
+            }
+        }
+        else
+        {
+            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): DbContext.Parts is null. Cannot fetch selected part.");
         }
     }
+
+    if (processedAndWillNavigate)
+    {
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Parameters processed. Updating UI. SelectedParts count in service: {BuildStateService.CurrentBuild.SelectedParts.Count}");
+        // StateHasChanged(); // Not calling StateHasChanged here because Navigation.NavigateTo will cause a re-render.
+                           // The UI will re-render using the updated BuildStateService.CurrentBuild.
+        
+        // await Update3DPreview(); // Call this if you re-add 3D and it needs to update based on service state
+
+        // Clean the URL by removing query parameters.
+        // The component will re-render based on the (now clean) URL and the persisted state in BuildStateService.
+        //Navigation.NavigateTo("/enginebuilder", replace: true);
+        // Note: OnParametersSetAsync will be called again due to this navigation.
+        // The first 'if' condition in this method will handle that re-entry gracefully.
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - EXITED (after processing query parameters and initiating URL clean navigation).");
+    }
+    else
+    {
+        // This path is taken on initial load without query parameters, or after the URL has been cleaned.
+        // The UI will render based on the current state in BuildStateService.CurrentBuild.
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - EXITED (no new query parameters to process, UI will render from service state. SelectedParts count: {BuildStateService.CurrentBuild.SelectedParts.Count}).");
+    }
+}
 
     private void SelectOrChangePart(int categoryId)
     {

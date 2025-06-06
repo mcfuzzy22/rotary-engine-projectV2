@@ -3,9 +3,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 using rotaryproject.Data;
 namespace rotaryproject.Data.Models
 {
-    public class Part
+    public partial class Part
     {
         [Key]
+        [Column("PartID")]
         public int PartId { get; set; } // Ensure casing matches your DB/usage
 
         [Required]
@@ -14,7 +15,12 @@ namespace rotaryproject.Data.Models
         [Required]
         [StringLength(150)]
         public string Name { get; set; } = string.Empty;
+        [ForeignKey("CategoryId")]
+        [InverseProperty("Parts")] // This points to the ICollection<Part> in PartCategory.cs
+        public virtual PartCategory Category { get; set; } = null!;
 
+        // NEW: Navigation property for the many-to-many relationship
+        public virtual ICollection<PartFitment> Fitments { get; set; } = new List<PartFitment>();
         [StringLength(50)]
         public string? Sku { get; set; } // Ensure casing matches your DB/usage
 
@@ -51,16 +57,11 @@ namespace rotaryproject.Data.Models
 
         public int? SealAmount { get; set; } // How many seals are in this part/package
 
-        [StringLength(100)]
-        public string? EngineCompatibility { get; set; } // General engine series, e.g., "13B-REW", "All 12A"
-
         public double? Rating { get; set; } // e.g., 0-5 stars
         public int? RatingCount { get; set; } // Number of reviews
 
 
-        // Navigation property back to the category
-        [ForeignKey("CategoryId")]
-        public virtual PartCategory? Category { get; set; }
+        // Navigation property back to the catego
 
         // Navigation property to PartStats (if you use this for some attributes)
     }

@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace rotaryproject.Migrations
 {
     /// <inheritdoc />
-    public partial class poopx2 : Migration
+    public partial class compatitiblity1 : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -51,6 +51,20 @@ namespace rotaryproject.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "EngineFamilies",
+                columns: table => new
+                {
+                    EngineFamilyId = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    FamilyCode = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: false),
+                    Description = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_EngineFamilies", x => x.EngineFamilyId);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "PartCategories",
                 columns: table => new
                 {
@@ -63,7 +77,7 @@ namespace rotaryproject.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK__PartCate__19093A2B0B380B12", x => x.CategoryID);
+                    table.PrimaryKey("PK_PartCategories", x => x.CategoryID);
                     table.ForeignKey(
                         name: "FK_PartCategories_PartCategories_ParentCategoryId",
                         column: x => x.ParentCategoryId,
@@ -204,13 +218,12 @@ namespace rotaryproject.Migrations
                 name: "Parts",
                 columns: table => new
                 {
-                    PartId = table.Column<int>(type: "int", nullable: false)
+                    PartID = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     CategoryId = table.Column<int>(type: "int", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(150)", maxLength: 150, nullable: false),
                     Sku = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
                     Description = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ModelPath = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: false),
                     ImagePath = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
                     BasePrice = table.Column<decimal>(type: "decimal(10,2)", nullable: true),
                     Brand = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
@@ -222,65 +235,41 @@ namespace rotaryproject.Migrations
                     SizeMm = table.Column<string>(type: "nvarchar(50)", maxLength: 50, nullable: true),
                     ManufacturingYear = table.Column<int>(type: "int", nullable: true),
                     SealAmount = table.Column<int>(type: "int", nullable: true),
-                    EngineCompatibility = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     Rating = table.Column<double>(type: "float", nullable: true),
                     RatingCount = table.Column<int>(type: "int", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK__Parts__7C3F0D3095AB3286", x => x.PartId);
+                    table.PrimaryKey("PK_Parts", x => x.PartID);
                     table.ForeignKey(
-                        name: "FK__Parts__CategoryI__3B75D760",
+                        name: "FK_Parts_PartCategories_CategoryId",
                         column: x => x.CategoryId,
                         principalTable: "PartCategories",
-                        principalColumn: "CategoryID");
+                        principalColumn: "CategoryID",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "CompatibilityRules",
+                name: "PartFitments",
                 columns: table => new
                 {
-                    RuleID = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    PartA_ID = table.Column<int>(type: "int", nullable: false),
-                    PartB_ID = table.Column<int>(type: "int", nullable: false),
-                    IsCompatible = table.Column<bool>(type: "bit", nullable: true, defaultValue: true),
-                    Description = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true)
+                    PartId = table.Column<int>(type: "int", nullable: false),
+                    EngineFamilyId = table.Column<int>(type: "int", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK__Compatib__110458C2D19B7CFD", x => x.RuleID);
+                    table.PrimaryKey("PK_PartFitments", x => new { x.PartId, x.EngineFamilyId });
                     table.ForeignKey(
-                        name: "FK__Compatibi__PartA__4316F928",
-                        column: x => x.PartA_ID,
-                        principalTable: "Parts",
-                        principalColumn: "PartId");
+                        name: "FK_PartFitments_EngineFamilies_EngineFamilyId",
+                        column: x => x.EngineFamilyId,
+                        principalTable: "EngineFamilies",
+                        principalColumn: "EngineFamilyId",
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK__Compatibi__PartB__440B1D61",
-                        column: x => x.PartB_ID,
+                        name: "FK_PartFitments_Parts_PartId",
+                        column: x => x.PartId,
                         principalTable: "Parts",
-                        principalColumn: "PartId");
-                });
-
-            migrationBuilder.CreateTable(
-                name: "PartStats",
-                columns: table => new
-                {
-                    PartStatID = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    PartID = table.Column<int>(type: "int", nullable: false),
-                    StatName = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    StatValue = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
-                    Unit = table.Column<string>(type: "nvarchar(20)", maxLength: 20, nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK__PartStat__AFCC32BA505FA52A", x => x.PartStatID);
-                    table.ForeignKey(
-                        name: "FK__PartStats__PartI__3E52440B",
-                        column: x => x.PartID,
-                        principalTable: "Parts",
-                        principalColumn: "PartId",
+                        principalColumn: "PartID",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -324,22 +313,6 @@ namespace rotaryproject.Migrations
                 filter: "[NormalizedUserName] IS NOT NULL");
 
             migrationBuilder.CreateIndex(
-                name: "IX_CompatibilityRules_PartA_ID",
-                table: "CompatibilityRules",
-                column: "PartA_ID");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_CompatibilityRules_PartB_ID",
-                table: "CompatibilityRules",
-                column: "PartB_ID");
-
-            migrationBuilder.CreateIndex(
-                name: "UQ__Compatib__C9D6D737D786A5C9",
-                table: "CompatibilityRules",
-                columns: new[] { "PartA_ID", "PartB_ID" },
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "IX_PartCategories_ParentCategoryId",
                 table: "PartCategories",
                 column: "ParentCategoryId");
@@ -351,14 +324,14 @@ namespace rotaryproject.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_PartFitments_EngineFamilyId",
+                table: "PartFitments",
+                column: "EngineFamilyId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_Parts_CategoryId",
                 table: "Parts",
                 column: "CategoryId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_PartStats_PartID",
-                table: "PartStats",
-                column: "PartID");
 
             migrationBuilder.CreateIndex(
                 name: "IX_UserSavedBuilds_UserId",
@@ -385,16 +358,16 @@ namespace rotaryproject.Migrations
                 name: "AspNetUserTokens");
 
             migrationBuilder.DropTable(
-                name: "CompatibilityRules");
-
-            migrationBuilder.DropTable(
-                name: "PartStats");
+                name: "PartFitments");
 
             migrationBuilder.DropTable(
                 name: "UserSavedBuilds");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");
+
+            migrationBuilder.DropTable(
+                name: "EngineFamilies");
 
             migrationBuilder.DropTable(
                 name: "Parts");
