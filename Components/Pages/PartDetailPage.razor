@@ -29,9 +29,9 @@ else if (part != null)
     <div class="container mt-3"> @* Added a container for better spacing/layout *@
         
         @* 1. CATEGORY NAME *@
-        @if (part.Category != null)
+        @if (part.CategoryId != null)
         {
-            <h5 class="text-muted mb-2">Category: @part.Category.Name</h5>
+            <h5 class="text-muted mb-2">Category: @part.Name</h5>
         }
         else
         {
@@ -153,7 +153,7 @@ else
             if (DbContext.Parts != null && PartId > 0)
             {
                 loadedPart = await DbContext.Parts
-                                    .Include(p => p.Category)
+                                    .Include(p => p.CategoryId)
                                     .FirstOrDefaultAsync(p => p.PartId == PartId); // Ensure p.PartId matches your Part.cs
 
                 if (loadedPart == null)
@@ -163,7 +163,7 @@ else
                 }
                 else
                 {
-                    Console.WriteLine($"PartDetailPage ({PartId}): Part '{loadedPart.Name}' loaded. ModelPath: '{loadedPart.ModelPath}'");
+                    Console.WriteLine($"PartDetailPage ({PartId}): Part '{loadedPart.Name}' loaded. ModelPath: ''");
                 }
             }
             else if (PartId <= 0)
@@ -188,16 +188,15 @@ else
             isLoading = false; // Must be set false so UI can update from loading state
         }
 
-        bool modelPathActuallyChanged = (this.part?.ModelPath != loadedPart?.ModelPath);
+
         bool partIdActuallyChanged = (this.part?.PartId != loadedPart?.PartId);
 
         this.part = loadedPart; // Now assign to the component's part field
 
         // Only try to reload the model if the engine is already up AND the part changed meaningfully for the model
-        if (_isEngineInitialized && this.part != null && !string.IsNullOrEmpty(this.part.ModelPath) && (partIdActuallyChanged || modelPathActuallyChanged))
+        if (_isEngineInitialized && this.part != null  && (partIdActuallyChanged))
         {
-            Console.WriteLine($"PartDetailPage ({PartId}): OnParametersSetAsync - Engine initialized and model/part changed. Attempting to reload model: {this.part.ModelPath}");
-            await SafeLoadModel(this.part.ModelPath);
+            Console.WriteLine($"PartDetailPage ({PartId}): OnParametersSetAsync - Engine initialized and model/part changed. Attempting to reload model: ");
         }
         else if (_isEngineInitialized && this.part == null && _currentLoadedModelPath != null) // Part became null, clear model
         {
@@ -236,11 +235,10 @@ protected override void OnAfterRender(bool firstRender)
                 Logger.LogInformation("PartDetailPage ({PartId}): JS 'blazorModelViewer.init' returned: {IsEngineInitialized}", PartId, _isEngineInitialized);
 
 
-                if (_isEngineInitialized && part != null && !string.IsNullOrEmpty(part.ModelPath))
+                if (_isEngineInitialized && part != null)
                 {
-                    Console.WriteLine($"PartDetailPage ({PartId}): Initial model load for: {part.ModelPath}");
-                    Logger.LogInformation("PartDetailPage ({PartId}): Initial model load for: {ModelPath}", PartId, part.ModelPath);
-                    await SafeLoadModel(part.ModelPath);
+                    Console.WriteLine($"PartDetailPage ({PartId}): Initial model load for: ");
+                    Logger.LogInformation("PartDetailPage ({PartId}): Initial model load for: {ModelPath}", PartId);
                 }
                 // ... (rest of the try-catch) ...
             StateHasChanged();

@@ -34,7 +34,6 @@ else
         </td>
         <td>@(part.Category?.Name ?? "N/A")</td>
         <td>@part.Description</td>
-        <td>@part.ModelPath</td>
     </tr>
 }
         </tbody>
@@ -51,7 +50,7 @@ else
             if (DbContext.Parts != null)
             {
                 parts = await DbContext.Parts
-                                    .Include(p => p.Category) // Eager load the Category
+                                    .Include(p => p.CategoryId) // Eager load the Category
                                     .OrderBy(p => p.Name)
                                     .ToListAsync();
             }

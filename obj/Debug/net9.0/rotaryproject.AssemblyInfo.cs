@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("rotaryproject")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+679104c6b7f30848fdf8dacd076a2ef5d4609724")]
 [assembly: System.Reflection.AssemblyProductAttribute("rotaryproject")]
 [assembly: System.Reflection.AssemblyTitleAttribute("rotaryproject")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

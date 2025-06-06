@@ -20,9 +20,6 @@ namespace rotaryproject.Data.Models
 
         public string? Description { get; set; }
 
-        [Required]
-        [StringLength(255)]
-        public string ModelPath { get; set; } = string.Empty; // For 3D model
 
         [StringLength(255)]
         public string? ImagePath { get; set; } // For 2D thumbnail image
@@ -66,13 +63,5 @@ namespace rotaryproject.Data.Models
         public virtual PartCategory? Category { get; set; }
 
         // Navigation property to PartStats (if you use this for some attributes)
-        public virtual ICollection<PartStat> PartStats { get; set; } = new List<PartStat>();
-
-        // Navigation properties for compatibility rules (already present from previous steps)
-        [InverseProperty("PartA")]
-        public virtual ICollection<CompatibilityRule> CompatibilityRulePartAs { get; set; } = new List<CompatibilityRule>();
-
-        [InverseProperty("PartB")]
-        public virtual ICollection<CompatibilityRule> CompatibilityRulePartBs { get; set; } = new List<CompatibilityRule>();
     }
 }

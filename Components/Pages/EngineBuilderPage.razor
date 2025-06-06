@@ -98,14 +98,14 @@ else
 
                             <tr>
                                 <td style="padding-left: @(level * 25 + 5)px;">
-                                    <strong>@category.Name</strong>
+                                    <strong>---- @category.Name ----</strong>
                                     @if (hasChildren)
                                     {
 
                                         // This is the expand/collapse button for parent categories
                                         <button class="btn btn-sm btn-link p-0 me-1" @onclick="() => ToggleExpansion(category.CategoryId)">
                                             <span class="oi @(isExpanded ? "oi-minus" : "oi-plus")" aria-hidden="true"></span>
-                                              'Click to expand components'
+                                              Click to Expand Components
                                         </button>
                                     }
                                 </td>
@@ -175,15 +175,13 @@ else
                                             <button class="btn btn-sm btn-outline-danger" @onclick="() => ClearPartSelection(category.CategoryId)">Clear</button>
                                         </div>
                                     }
-                                    else if (hasChildren)
+                                    else if (level > 0)
                                     {
                                         // A placeholder category with no selection gets a dash.
-                                        <span class="text-muted text-center d-block">-</span>
-                                    }
-                                    else
-                                    {
-                                        // A selectable (leaf) category gets the "Choose" button.
                                         <button class="btn btn-sm btn-primary" @onclick="() => SelectOrChangePart(category.CategoryId)">+ Choose A @category.Name</button>
+                                        
+                                    } else if(level == 0) {
+                                        <span class="text-muted text-center d-block">-</span>
                                     }
                                 </td>
                             </tr>
@@ -395,7 +393,7 @@ else
                     if (DbContext.Parts != null)
                     {
                         var part = await DbContext.Parts
-                                          .Include(p => p.Category)
+                                          .Include(p => p.CategoryId)
                                           .FirstOrDefaultAsync(p => p.PartId == partIdVal && p.CategoryId == categoryId);
                         if (part != null)
                         {
@@ -412,7 +410,7 @@ else
             if (DbContext.Parts != null)
             {
                 var part = await DbContext.Parts
-                                    .Include(p => p.Category)
+                                    .Include(p => p.CategoryId)
                                     .FirstOrDefaultAsync(p => p.PartId == PassedSelectedPartId.Value);
 
                 if (part != null && part.CategoryId == PassedCategoryId.Value)
