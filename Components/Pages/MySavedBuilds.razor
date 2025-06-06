@@ -1,0 +1,177 @@
+@page "/my-saved-builds"
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using rotaryproject.Data
+@using rotaryproject.Data.Models
+@attribute [Authorize] 
+
+@inject RotaryEngineDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime // For shareable link copy
+
+<PageTitle>My Saved Engine Builds</PageTitle>
+
+<h1>My Saved Engine Builds</h1>
+
+@if (isLoading)
+{
+    <p><em>Loading your saved builds...</em></p>
+}
+else if (savedBuilds == null || !savedBuilds.Any())
+{
+    <p>You haven't saved any engine builds yet. <a href="/enginebuilder">Start building one!</a></p>
+}
+else
+{
+    <table class="table table-hover">
+        <thead class="table-light">
+            <tr>
+                <th>Build Name</th>
+                <th>Saved Date</th>
+                <th>Last Modified</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var build in savedBuilds)
+            {
+                <tr>
+                    <td>@build.BuildName</td>
+                    <td>@build.SavedDate.ToLocalTime().ToString("g")</td>
+                    <td>@build.LastModifiedDate.ToLocalTime().ToString("g")</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary me-1" @onclick="() => LoadBuild(build.BuildConfigurationString)">Load</button>
+                        <button class="btn btn-sm btn-info me-1" @onclick="() => GenerateAndCopyShareLink(build.BuildConfigurationString)">Share</button>
+                        <button class="btn btn-sm btn-danger" @onclick="() => ConfirmDeleteBuild(build)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (buildToDelete != null)
+{
+    <div class="modal" tabindex="-1" style="display: block; background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Confirm Delete</h5>
+                    <button type="button" class="btn-close" @onclick="() => buildToDelete = null"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete the build named "<strong>@buildToDelete.BuildName</strong>"?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="() => buildToDelete = null">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeleteBuildAsync">Delete Build</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(shareLinkForCopy))
+{
+    <div class="mt-2">
+        <small>Shareable Link: <input type="text" class="form-control-sm" value="@shareLinkForCopy" readonly style="width:300px;" />
+               <button class="btn btn-sm btn-outline-secondary" @onclick="CopyShareLinkToClipboard">Copy</button>
+        </small>
+        @if(shareLinkCopied) { <small class="text-success ms-2">Copied!</small> }
+    </div>
+}
+
+
+@code {
+    private List<UserSavedBuild>? savedBuilds;
+    private bool isLoading = true;
+    private ApplicationUser? currentUser;
+
+    private UserSavedBuild? buildToDelete; // For delete confirmation modal
+    private string? shareLinkForCopy;
+    private bool shareLinkCopied = false;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity != null && user.Identity.IsAuthenticated)
+        {
+            currentUser = await UserManager.GetUserAsync(user);
+            if (currentUser != null && DbContext.UserSavedBuilds != null)
+            {
+                savedBuilds = await DbContext.UserSavedBuilds
+                                    .Where(b => b.UserId == currentUser.Id)
+                                    .OrderByDescending(b => b.LastModifiedDate)
+                                    .ToListAsync();
+                Console.WriteLine($"MySavedBuildsPage: Loaded {savedBuilds.Count} builds for user {currentUser.Email}.");
+            }
+            else { savedBuilds = new List<UserSavedBuild>(); }
+        }
+        else { savedBuilds = new List<UserSavedBuild>(); } // Should not happen due to [Authorize]
+        isLoading = false;
+    }
+
+    private void LoadBuild(string buildConfigurationString)
+    {
+        Console.WriteLine($"MySavedBuildsPage: Loading build: {buildConfigurationString}");
+        Navigation.NavigateTo($"/enginebuilder?build={buildConfigurationString}");
+    }
+
+    private void GenerateAndCopyShareLink(string buildConfigurationString)
+    {
+        var builderPageUri = Navigation.ToAbsoluteUri("/enginebuilder").ToString();
+        shareLinkForCopy = $"{builderPageUri}?build={buildConfigurationString}";
+        shareLinkCopied = false; // Reset copy status
+        Console.WriteLine($"MySavedBuildsPage: Generated share link: {shareLinkForCopy}");
+        // The UI will show the link and copy button. Actual copy happens via JS.
+    }
+
+    private async Task CopyShareLinkToClipboard()
+    {
+        if (!string.IsNullOrEmpty(shareLinkForCopy))
+        {
+            bool success = await JSRuntime.InvokeAsync<bool>("blazorGui.clipboardCopy.copyText", shareLinkForCopy);
+            shareLinkCopied = success;
+            if (success) {
+                Console.WriteLine("MySavedBuildsPage: Share link copied.");
+                _ = Task.Delay(2000).ContinueWith(_ => { InvokeAsync(() => { shareLinkCopied = false; StateHasChanged(); }); });
+            } else { Console.WriteLine("MySavedBuildsPage: Failed to copy share link."); }
+        }
+    }
+
+    private void ConfirmDeleteBuild(UserSavedBuild build)
+    {
+        buildToDelete = build;
+        shareLinkForCopy = null; // Hide share link UI if delete confirmation is up
+        Console.WriteLine($"MySavedBuildsPage: Confirming delete for build '{build.BuildName}' (ID: {build.UserSavedBuildId}).");
+    }
+
+    private async Task DeleteBuildAsync()
+    {
+        if (buildToDelete != null && DbContext.UserSavedBuilds != null)
+        {
+            Console.WriteLine($"MySavedBuildsPage: Deleting build '{buildToDelete.BuildName}' (ID: {buildToDelete.UserSavedBuildId}).");
+            try
+            {
+                DbContext.UserSavedBuilds.Remove(buildToDelete);
+                await DbContext.SaveChangesAsync();
+                savedBuilds?.Remove(buildToDelete); // Update UI list
+                Console.WriteLine("MySavedBuildsPage: Build deleted successfully.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"MySavedBuildsPage: EXCEPTION deleting build: {ex.ToString()}");
+                // TODO: Show error message to user
+            }
+        }
+        buildToDelete = null; // Close modal
+        StateHasChanged();
+    }
+}

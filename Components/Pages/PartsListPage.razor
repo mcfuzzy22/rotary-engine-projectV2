@@ -1,0 +1,69 @@
+@page "/partslist"
+@using rotaryproject.Data
+@using rotaryproject.Data.Models
+@inject RotaryEngineDbContext DbContext
+@using Microsoft.EntityFrameworkCore
+
+<h3>All Parts</h3>
+
+@if (parts == null)
+{
+    <p><em>Loading parts...</em></p>
+}
+else if (!parts.Any())
+{
+    <p><em>No parts found in the database.</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Model Path</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var part in parts)
+            {
+    <tr>
+        <td>
+            <a href="/partdetail/@part.PartId">@part.Name</a> @* <<< MODIFIED: Make name a link *@
+        </td>
+        <td>@(part.Category?.Name ?? "N/A")</td>
+        <td>@part.Description</td>
+        <td>@part.ModelPath</td>
+    </tr>
+}
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Part>? parts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (DbContext.Parts != null)
+            {
+                parts = await DbContext.Parts
+                                    .Include(p => p.Category) // Eager load the Category
+                                    .OrderBy(p => p.Name)
+                                    .ToListAsync();
+            }
+            else
+            {
+                parts = new List<Part>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching parts: {ex.Message}");
+            // Handle error display in UI if necessary
+        }
+    }
+}

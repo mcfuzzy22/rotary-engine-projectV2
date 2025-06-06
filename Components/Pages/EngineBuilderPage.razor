@@ -1,0 +1,484 @@
+@page "/enginebuilder"
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
+@inject RotaryEngineDbContext DbContext
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject rotaryproject.Services.EngineBuildStateService BuildStateService
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@using Microsoft.AspNetCore.Identity
+@using rotaryproject.Data
+@using rotaryproject.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+
+<PageTitle>Build Your Rotary Engine</PageTitle>
+
+<h1>Choose Your Engine Parts</h1>
+
+<div class="compatibility-summary my-3 p-3 bg-light border rounded" style="min-height: 50px;">
+    <p class="mb-0"><em>Compatibility and overall stats will appear here. Current Total: @BuildStateService.CurrentBuild.TotalPrice.ToString("C")</em></p>
+</div>
+
+@if (isLoading)
+{
+    <p><em>Loading categories...</em></p>
+}
+else if (!topLevelCategories.Any())
+{
+    <p><em>No part categories found. Please add some categories first.</em></p>
+}
+else
+{
+    @* --- "SHARE YOUR BUILD" AND "SAVE BUILD" BLOCKS --- *@
+    @if (BuildStateService.CurrentBuild.SelectedParts.Any())
+    {
+        <div class="mt-4 mb-3 p-3 border rounded bg-light">
+            <h4>Share Your Build</h4>
+            <div class="input-group">
+                <input type="text" class="form-control" @bind="shareableLink" readonly
+                       placeholder="Click 'Generate Link' to create a shareable link." />
+                <button class="btn btn-info" @onclick="GenerateShareableLink">Generate Link</button>
+                @if (!string.IsNullOrEmpty(shareableLink))
+                {
+                    <button class="btn btn-outline-secondary" @onclick="CopyLinkToClipboard">Copy</button>
+                }
+            </div>
+            @if (linkCopied)
+            {
+                <small class="text-success d-block mt-1">Link copied to clipboard!</small>
+            }
+        </div>
+        <AuthorizeView>
+            <Authorized>
+                <div class="mt-3 p-3 border rounded bg-white">
+                    <h4>Save This Build</h4>
+                    @if (!string.IsNullOrEmpty(saveBuildMessage))
+                    {
+                        <div class="alert @(saveBuildSuccess ? "alert-success" : "alert-danger")">@saveBuildMessage</div>
+                    }
+                    <div class="input-group">
+                        <input type="text" class="form-control" @bind="newBuildName" placeholder="Enter a name for your build" />
+                        <button class="btn btn-success" @onclick="SaveCurrentBuild" disabled="@string.IsNullOrWhiteSpace(newBuildName)">Save Build</button>
+                    </div>
+                    <small class="form-text text-muted">Name your build to save it to your account.</small>
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <div class="mt-3 p-3 border rounded bg-light-subtle">
+                    <p class="mb-0">Want to save this build? <a href="Account/Login?returnUrl=@ReturnUrlForLogin">Log in</a> or <a href="Account/Register">Register</a> to save your builds!</p>
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+    }
+
+    <div class="table-responsive mt-3">
+        <table class="table engine-builder-table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 25%;">Component</th>
+                    <th style="width: 10%;">Image</th>
+                    <th style="width: 25%;">Selection</th>
+                    <th style="width: 10%;">Availability</th>
+                    <th style="width: 10%;">Vendor</th>
+                    <th style="width: 5%;">Price</th>
+                    <th style="width: 15%;">Actions / Buy</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    // Local function to recursively render category rows
+                    void RenderCategoryRows(IEnumerable<PartCategory> categories, int level)
+                    {
+                        foreach (var category in categories.OrderBy(c => c.Name))
+                        {
+                            var isExpanded = expandedCategoryIds.Contains(category.CategoryId);
+                            var hasChildren = category.SubCategories != null && category.SubCategories.Any();
+
+                            <tr>
+                                <td style="padding-left: @(level * 25 + 5)px;">
+                                    <strong>@category.Name</strong>
+                                    @if (hasChildren)
+                                    {
+
+                                        // This is the expand/collapse button for parent categories
+                                        <button class="btn btn-sm btn-link p-0 me-1" @onclick="() => ToggleExpansion(category.CategoryId)">
+                                            <span class="oi @(isExpanded ? "oi-minus" : "oi-plus")" aria-hidden="true"></span>
+                                              'Click to expand components'
+                                        </button>
+                                    }
+                                </td>
+                                <td>
+                                    @if (BuildStateService.CurrentBuild.SelectedParts.TryGetValue(category.CategoryId, out Part? imgPart) && imgPart != null && !string.IsNullOrEmpty(imgPart.ImagePath))
+                                    {
+                                        <img src="@imgPart.ImagePath" alt="@imgPart.Name" style="max-width: 75px; max-height: 75px; object-fit: contain;"
+                                             onerror="this.onerror=null; this.src='https://placehold.co/75x75/e1e1e1/777?text=No+Image';" />
+                                    }
+                                    else if (BuildStateService.CurrentBuild.SelectedParts.TryGetValue(category.CategoryId, out Part? selectedPartCheck) && selectedPartCheck != null)
+                                    {
+                                        <img src="https://placehold.co/75x75/e1e1e1/777?text=No+Image" alt="No image available" style="max-width: 75px; max-height: 75px; object-fit: contain;" />
+                                    }
+                                </td>
+                                <td>
+                                    @if (BuildStateService.CurrentBuild.SelectedParts.TryGetValue(category.CategoryId, out Part? selectedPart) && selectedPart != null)
+                                    {
+                                        <a href="/partdetail/@selectedPart.PartId"><strong>@selectedPart.Name</strong></a>
+                                        @if (!string.IsNullOrWhiteSpace(selectedPart.Brand))
+                                        {
+                                            <br /><small class="text-muted">Brand: @selectedPart.Brand</small>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">No part selected</span>
+                                    }
+                                </td>
+                                <td>
+                                    @if (BuildStateService.CurrentBuild.SelectedParts.TryGetValue(category.CategoryId, out Part? availPart) && availPart != null && !string.IsNullOrEmpty(availPart.Availability))
+                                    {
+                                        <span>@availPart.Availability</span>
+                                    }
+                                    else if (BuildStateService.CurrentBuild.SelectedParts.ContainsKey(category.CategoryId) && BuildStateService.CurrentBuild.SelectedParts[category.CategoryId] != null)
+                                    { <span class="text-muted">-</span> }
+                                </td>
+                                <td>
+                                    @if (BuildStateService.CurrentBuild.SelectedParts.TryGetValue(category.CategoryId, out Part? vendorPart) && vendorPart != null && !string.IsNullOrEmpty(vendorPart.VendorName))
+                                    {
+                                        @if (!string.IsNullOrEmpty(vendorPart.VendorProductUrl))
+                                        {
+                                            <a href="@vendorPart.VendorProductUrl" target="_blank" rel="noopener noreferrer">@vendorPart.VendorName</a>
+                                        }
+                                        else { <span>@vendorPart.VendorName</span> }
+                                    }
+                                    else if (BuildStateService.CurrentBuild.SelectedParts.ContainsKey(category.CategoryId) && BuildStateService.CurrentBuild.SelectedParts[category.CategoryId] != null)
+                                    { <span class="text-muted">-</span> }
+                                </td>
+                                <td>
+                                    @if (BuildStateService.CurrentBuild.SelectedParts.TryGetValue(category.CategoryId, out Part? pricedPart) && pricedPart != null && pricedPart.BasePrice.HasValue)
+                                    {
+                                        <strong>@pricedPart.BasePrice.Value.ToString("C")</strong>
+                                    }
+                                    else if (BuildStateService.CurrentBuild.SelectedParts.ContainsKey(category.CategoryId) && BuildStateService.CurrentBuild.SelectedParts[category.CategoryId] != null)
+                                    { <span class="text-muted">N/A</span> }
+                                    else { <span class="text-muted">-</span> }
+                                </td>
+                                <td>
+                                    @if (BuildStateService.CurrentBuild.SelectedParts.TryGetValue(category.CategoryId, out Part? existingPart) && existingPart != null)
+                                    {
+                                        <div class="d-flex flex-column">
+                                            @if (!string.IsNullOrEmpty(existingPart.VendorProductUrl))
+                                            {
+                                                <a href="@existingPart.VendorProductUrl" target="_blank" rel="noopener noreferrer" class="btn btn-success btn-sm mb-1">Buy</a>
+                                            }
+                                            <button class="btn btn-sm btn-outline-secondary mb-1" @onclick="() => SelectOrChangePart(category.CategoryId)">Change</button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ClearPartSelection(category.CategoryId)">Clear</button>
+                                        </div>
+                                    }
+                                    else if (hasChildren)
+                                    {
+                                        // A placeholder category with no selection gets a dash.
+                                        <span class="text-muted text-center d-block">-</span>
+                                    }
+                                    else
+                                    {
+                                        // A selectable (leaf) category gets the "Choose" button.
+                                        <button class="btn btn-sm btn-primary" @onclick="() => SelectOrChangePart(category.CategoryId)">+ Choose A @category.Name</button>
+                                    }
+                                </td>
+                            </tr>
+
+                            @if (isExpanded && hasChildren)
+                            {
+                                RenderCategoryRows(category.SubCategories, level + 1);
+                            }
+                        }
+                    }
+
+                    // Initial call for top-level categories
+                    RenderCategoryRows(topLevelCategories, 0);
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<style>
+    .engine-builder-table th, .engine-builder-table td { vertical-align: middle; }
+    .btn-link {
+        text-decoration: none;
+        border: none;
+    }
+</style>
+
+@code {
+    [SupplyParameterFromQuery(Name = "build")]
+    public string? IncomingBuildConfigurationString { get; set; }
+
+    [SupplyParameterFromQuery]
+    public int? PassedCategoryId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public int? PassedSelectedPartId { get; set; }
+
+    private List<PartCategory> topLevelCategories = new List<PartCategory>();
+    private HashSet<int> expandedCategoryIds = new HashSet<int>();
+    private bool isLoading = true;
+
+    private string? shareableLink;
+    private bool linkCopied = false;
+    private string? newBuildName;
+    private string? saveBuildMessage;
+    private bool saveBuildSuccess = false;
+
+    private string ReturnUrlForLogin => Navigation.Uri;
+
+    private void ToggleExpansion(int categoryId)
+    {
+        Console.WriteLine("ToggleExpansion - ENTERED.");
+        if (expandedCategoryIds.Contains(categoryId))
+        {
+            expandedCategoryIds.Remove(categoryId);
+        }
+        else
+        {
+            expandedCategoryIds.Add(categoryId);
+        }
+        // This is the critical fix: explicitly tell Blazor to re-render the component.
+        StateHasChanged();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var allCategories = await DbContext.PartCategories.ToListAsync();
+            var categoryLookup = allCategories.ToDictionary(c => c.CategoryId);
+
+            // This prevents issues with Entity Framework's change tracking potentially adding items multiple times.
+            foreach (var category in allCategories)
+            {
+                category.SubCategories = new List<PartCategory>();
+            }
+
+            var nonRootCategories = new List<PartCategory>();
+
+            // First, connect all children to their parents and identify all items that are children.
+            foreach (var category in allCategories)
+            {
+                if (category.ParentCategoryId.HasValue && categoryLookup.TryGetValue(category.ParentCategoryId.Value, out var parentCategory))
+                {
+                    parentCategory.SubCategories.Add(category);
+                    nonRootCategories.Add(category); // This is definitely a child category.
+                }
+            }
+
+            // The top-level categories are all the categories EXCEPT the ones we identified as children.
+            // This logically prevents any child from appearing at the top level.
+            topLevelCategories = allCategories.Except(nonRootCategories)
+                                              .OrderBy(c => c.Name)
+                                              .ToList();
+
+            Console.WriteLine($"Correctly loaded {topLevelCategories.Count} top-level categories.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"EngineBuilderPage: EXCEPTION while loading categories: {ex.ToString()}");
+            topLevelCategories = new List<PartCategory>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SaveCurrentBuild()
+    {
+        saveBuildMessage = null;
+        if (string.IsNullOrWhiteSpace(newBuildName))
+        {
+            saveBuildMessage = "Please enter a name for your build.";
+            saveBuildSuccess = false;
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity != null && user.Identity.IsAuthenticated)
+        {
+            var applicationUser = await UserManager.GetUserAsync(user);
+            if (applicationUser == null)
+            {
+                saveBuildMessage = "Error: Could not retrieve user information.";
+                saveBuildSuccess = false;
+                return;
+            }
+
+            if (BuildStateService.CurrentBuild.SelectedParts == null || !BuildStateService.CurrentBuild.SelectedParts.Any())
+            {
+                saveBuildMessage = "There are no parts selected in the current build to save.";
+                saveBuildSuccess = false;
+                return;
+            }
+
+            var buildParts = BuildStateService.CurrentBuild.SelectedParts
+                .Where(kvp => kvp.Value != null)
+                .Select(kvp => $"{kvp.Key}-{kvp.Value!.PartId}");
+            string buildConfigString = string.Join("_", buildParts);
+
+            if (string.IsNullOrEmpty(buildConfigString))
+            {
+                saveBuildMessage = "Cannot save an empty build configuration.";
+                saveBuildSuccess = false;
+                return;
+            }
+
+            var savedBuild = new UserSavedBuild
+            {
+                BuildName = newBuildName,
+                UserId = applicationUser.Id,
+                BuildConfigurationString = buildConfigString,
+                SavedDate = DateTime.UtcNow,
+                LastModifiedDate = DateTime.UtcNow
+            };
+
+            try
+            {
+                DbContext.UserSavedBuilds.Add(savedBuild);
+                await DbContext.SaveChangesAsync();
+                saveBuildMessage = $"Build '{newBuildName}' saved successfully!";
+                saveBuildSuccess = true;
+                newBuildName = string.Empty;
+                Console.WriteLine($"EngineBuilderPage: Build '{savedBuild.BuildName}' saved for user {applicationUser.Email}.");
+            }
+            catch (Exception ex)
+            {
+                saveBuildMessage = "Error saving build to database. Please try again.";
+                saveBuildSuccess = false;
+                Console.WriteLine($"EngineBuilderPage: EXCEPTION saving build: {ex.ToString()}");
+            }
+        }
+        else
+        {
+            saveBuildMessage = "You must be logged in to save a build.";
+            saveBuildSuccess = false;
+        }
+        StateHasChanged();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - ENTERED. BuildString: '{IncomingBuildConfigurationString}', PassedCatId: {PassedCategoryId}, PassedSelPartId: {PassedSelectedPartId}");
+
+        if (string.IsNullOrWhiteSpace(IncomingBuildConfigurationString) && !PassedSelectedPartId.HasValue)
+        {
+            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - No new incoming build/selection parameters to process.");
+            return;
+        }
+
+        bool processedAndWillNavigate = false;
+
+        if (!string.IsNullOrWhiteSpace(IncomingBuildConfigurationString))
+        {
+            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing build string: {IncomingBuildConfigurationString}");
+            processedAndWillNavigate = true;
+            BuildStateService.CurrentBuild.SelectedParts.Clear();
+
+            var categoryPartPairs = IncomingBuildConfigurationString.Split('_');
+            foreach (var pairString in categoryPartPairs)
+            {
+                var ids = pairString.Split('-');
+                if (ids.Length == 2 && int.TryParse(ids[0], out int categoryId) && int.TryParse(ids[1], out int partIdVal))
+                {
+                    if (DbContext.Parts != null)
+                    {
+                        var part = await DbContext.Parts
+                                          .Include(p => p.Category)
+                                          .FirstOrDefaultAsync(p => p.PartId == partIdVal && p.CategoryId == categoryId);
+                        if (part != null)
+                        {
+                            BuildStateService.CurrentBuild.SelectPart(categoryId, part);
+                        }
+                    }
+                }
+            }
+        }
+        else if (PassedSelectedPartId.HasValue && PassedCategoryId.HasValue)
+        {
+            processedAndWillNavigate = true;
+            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing direct selection - CategoryID: {PassedCategoryId.Value}, PartID: {PassedSelectedPartId.Value}");
+            if (DbContext.Parts != null)
+            {
+                var part = await DbContext.Parts
+                                    .Include(p => p.Category)
+                                    .FirstOrDefaultAsync(p => p.PartId == PassedSelectedPartId.Value);
+
+                if (part != null && part.CategoryId == PassedCategoryId.Value)
+                {
+                    BuildStateService.CurrentBuild.SelectPart(PassedCategoryId.Value, part);
+                }
+            }
+        }
+
+        if (processedAndWillNavigate)
+        {
+            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Parameters processed. Updating UI. SelectedParts count in service: {BuildStateService.CurrentBuild.SelectedParts.Count}");
+            Navigation.NavigateTo("/enginebuilder", replace: true);
+        }
+    }
+
+    private void SelectOrChangePart(int categoryId)
+    {
+        Console.WriteLine($"EngineBuilderPage: Navigating to select part for CategoryID: {categoryId}");
+        Navigation.NavigateTo($"/selectpart/{categoryId}");
+    }
+
+    private async Task ClearPartSelection(int categoryId)
+    {
+        Console.WriteLine($"EngineBuilderPage: Clearing part selection for CategoryID: {categoryId}");
+        BuildStateService.CurrentBuild.SelectPart(categoryId, null);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void GenerateShareableLink()
+    {
+        linkCopied = false;
+        if (BuildStateService.CurrentBuild.SelectedParts == null || !BuildStateService.CurrentBuild.SelectedParts.Any())
+        {
+            shareableLink = "Please select some parts first.";
+            return;
+        }
+
+        var buildParts = BuildStateService.CurrentBuild.SelectedParts
+            .Where(kvp => kvp.Value != null)
+            .Select(kvp => $"{kvp.Key}-{kvp.Value!.PartId}");
+        string buildString = string.Join("_", buildParts);
+
+        if (string.IsNullOrEmpty(buildString))
+        {
+            shareableLink = "Error creating build string.";
+            return;
+        }
+        var builderPageUri = Navigation.ToAbsoluteUri("/enginebuilder").ToString();
+        shareableLink = $"{builderPageUri}?build={buildString}";
+    }
+
+    private async Task CopyLinkToClipboard()
+    {
+        if (!string.IsNullOrEmpty(shareableLink))
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", shareableLink);
+                linkCopied = true;
+                 _ = Task.Delay(2000).ContinueWith(_ => { InvokeAsync(() => { linkCopied = false; StateHasChanged(); }); });
+            }
+            catch
+            {
+                linkCopied = false; // JS interop might fail
+            }
+        }
+    }
+}

@@ -1,0 +1,68 @@
+@page "/part-categories" // You can choose a different route like "/browse" or "/products"
+@inject RotaryEngineDbContext DbContext
+@inject NavigationManager Navigation
+@using rotaryproject.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using rotaryproject.Data
+<PageTitle>Browse Part Categories</PageTitle>
+
+<h1>Browse Part Categories</h1>
+
+@if (isLoading)
+{
+    <p><em>Loading categories...</em></p>
+}
+else if (partCategories == null || !partCategories.Any())
+{
+    <p><em>No part categories found in the database.</em></p>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var category in partCategories)
+        {
+            // Each category is a clickable item that navigates to view parts for that category
+            <a href="/parts-by-category/@category.CategoryId" class="list-group-item list-group-item-action">
+                <h5 class="mb-1">@category.Name</h5>
+                @if (!string.IsNullOrWhiteSpace(category.Description))
+                {
+                    <p class="mb-1 text-muted">@category.Description</p>
+                }
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private List<PartCategory>? partCategories;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Console.WriteLine("CategoriesListPage: OnInitializedAsync - Loading part categories.");
+        isLoading = true;
+        try
+        {
+            if (DbContext.PartCategories != null)
+            {
+                // Ensure CategoryId casing matches your PartCategory.cs model
+                partCategories = await DbContext.PartCategories.OrderBy(c => c.Name).ToListAsync();
+                Console.WriteLine($"CategoriesListPage: Loaded {partCategories.Count} categories.");
+            }
+            else
+            {
+                partCategories = new List<PartCategory>();
+                Console.WriteLine("CategoriesListPage: PartCategories DbSet is null.");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"CategoriesListPage: Error loading categories: {ex.Message}");
+            partCategories = new List<PartCategory>(); // Initialize to empty on error
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

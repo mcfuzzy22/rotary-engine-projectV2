@@ -1,0 +1,110 @@
+@page "/parts-by-category/{CategoryId:int}" // Receives CategoryId from the route
+@rendermode InteractiveServer
+@inject RotaryEngineDbContext DbContext
+@inject NavigationManager Navigation
+@using rotaryproject.Data.Models
+@using Microsoft.EntityFrameworkCore
+@using rotaryproject.Data
+@if (isLoading)
+{
+    <p><em>Loading parts...</em></p>
+}
+else if (currentCategory != null)
+{
+    <PageTitle>Parts in @currentCategory.Name</PageTitle>
+    <h1>Parts in Category: @currentCategory.Name</h1>
+    <hr />
+
+    @if (partsForCategory == null || !partsForCategory.Any())
+    {
+        <p><em>No parts found for the category: @currentCategory.Name.</em></p>
+    }
+    else
+    {
+        <div class="list-group">
+            @foreach (var part in partsForCategory)
+            {
+                // Each part links to its own detail page
+                <a href="/partdetail/@part.PartId" class="list-group-item list-group-item-action"> @* Ensure PartId matches Part.cs casing *@
+                    <div class="d-flex w-100 justify-content-between">
+                        <h5 class="mb-1">@part.Name</h5>
+                        <small>Price: @(part.BasePrice?.ToString("C") ?? "N/A")</small>
+                    </div>
+                    <p class="mb-1">@(part.Description ?? "No description available.")</p>
+                    <small class="text-muted">SKU: @(part.Sku ?? "N/A")</small> @* Ensure Sku matches Part.cs casing *@
+                </a>
+            }
+        </div>
+    }
+}
+else // currentCategory is null, and not loading (meaning CategoryId was invalid or not found)
+{
+    <PageTitle>Category Not Found</PageTitle>
+    <h1>Category Not Found</h1>
+    <p><em>The selected category (ID: @CategoryId) was not found.</em></p>
+}
+
+<div class="mt-4">
+    <button class="btn btn-outline-secondary" @onclick="GoToCategoriesList">
+        <span class="oi oi-arrow-left" aria-hidden="true"></span> Back to All Categories
+    </button>
+</div>
+
+@code {
+    [Parameter]
+    public int CategoryId { get; set; } // Receives the CategoryId from the route
+
+    private List<Part>? partsForCategory;
+    private PartCategory? currentCategory;
+    private bool isLoading = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Console.WriteLine($"ViewPartsByCategoryPage: OnParametersSetAsync - Loading parts for CategoryId {CategoryId}");
+        isLoading = true;
+        try
+        {
+            if (DbContext.PartCategories != null && DbContext.Parts != null && CategoryId > 0)
+            {
+                currentCategory = await DbContext.PartCategories.FindAsync(CategoryId);
+
+                if (currentCategory != null)
+                {
+                    // Ensure p.CategoryId casing matches your Part.cs model
+                    partsForCategory = await DbContext.Parts
+                                                .Where(p => p.CategoryId == CategoryId) 
+                                                .OrderBy(p => p.Name)
+                                                .ToListAsync();
+                    Console.WriteLine($"ViewPartsByCategoryPage: Found {partsForCategory?.Count ?? 0} parts for category '{currentCategory.Name}'.");
+                }
+                else
+                {
+                    Console.WriteLine($"ViewPartsByCategoryPage: Category with ID {CategoryId} not found.");
+                    partsForCategory = new List<Part>(); 
+                }
+            }
+            else
+            {
+                Console.WriteLine($"ViewPartsByCategoryPage: Invalid CategoryId ({CategoryId}) or DbContext not ready.");
+                partsForCategory = new List<Part>();
+                currentCategory = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ViewPartsByCategoryPage: Error loading parts or category: {ex.ToString()}");
+            partsForCategory = new List<Part>();
+            currentCategory = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void GoToCategoriesList()
+    {
+        Console.WriteLine($"ViewPartsByCategoryPage: GoToCategoriesList method CALLED. Attempting to navigate to /part-categories");
+        Navigation.NavigateTo("/part-categories"); // Navigate back to the list of all categories
+    }
+}

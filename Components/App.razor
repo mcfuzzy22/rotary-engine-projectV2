@@ -1,0 +1,39 @@
+﻿@using Microsoft.AspNetCore.Components.Authorization 
+@using Microsoft.AspNetCore.Components.Routing
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Rotary Engine Builder</title>
+    <base href="/" />
+    
+    <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+    <link rel="stylesheet" href="@Assets["app.css"]" />
+    <link rel="stylesheet" href="@Assets["rotaryproject.styles.css"]" /> 
+    
+    <ImportMap />
+    
+    <link rel="icon" type="image/png" href="favicon.png" />
+
+    
+    <HeadOutlet @rendermode="InteractiveServer" />
+</head>
+
+<body>
+    
+    <CascadingAuthenticationState>
+        <Routes @rendermode="InteractiveServer" /> 
+    </CascadingAuthenticationState>
+
+    <script src="_framework/blazor.web.js"></script>
+    
+    @* Babylon.js and your custom scripts - order is correct *@
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="js/modelViewer.js"></script>
+    <script src="js/site.js"></script> @* For clipboard copy and other site-wide JS utilities *@
+</body>
+
+</html>

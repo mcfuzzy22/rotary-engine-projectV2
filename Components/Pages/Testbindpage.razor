@@ -1,0 +1,14 @@
+@page "/Testbindpage"
+
+<h3>Test Binding</h3>
+
+<label>Type here:</label>
+<InputText @bind-Value="testValue" @bind-Value:event="oninput" />
+
+<p style="margin-top: 20px; font-weight: bold;">
+    Value in C# is: "@testValue"
+</p>
+
+@code {
+    private string? testValue;
+}

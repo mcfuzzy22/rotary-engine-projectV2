@@ -1,0 +1,48 @@
+
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Identity
+@inject NavigationManager Navigation
+<CascadingAuthenticationState>
+<AuthorizeView>
+    <Authorized>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="Account/Manage" Match="NavLinkMatch.All">
+                <span class="bi bi-person-fill-nav-menu" aria-hidden="true"></span>  @context.User.Identity?.Name
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            @* For Blazor Server/Web App with interactive server components, form submission for logout is preferred *@
+            <form action="Account/Logout" method="post">
+                @* Antiforgery token will be handled by Blazor for named forms, 
+                   or ensure your _Host.cshtml or equivalent has antiforgery meta if this becomes a plain POST *@
+                <button type="submit" class="nav-link btn btn-link">
+                    <span class="bi bi-box-arrow-right-nav-menu" aria-hidden="true"></span> Log out
+                </button>
+            </form>
+        </div>
+        <div class="nav-item px-3">
+    <NavLink class="nav-link" href="my-saved-builds">
+        <span class="bi bi-archive-fill-nav-menu" aria-hidden="true"></span> My Saved Builds
+    </NavLink>
+    </div>
+    </Authorized>
+    <NotAuthorized>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="Account/Register">
+                <span class="bi bi-person-badge-nav-menu" aria-hidden="true"></span> Register
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+            <NavLink class="nav-link" href="Account/Login">
+                <span class="bi bi-box-arrow-in-right-nav-menu" aria-hidden="true"></span> Log in
+            </NavLink>
+        </div>
+        <div class="nav-item px-3">
+    <NavLink class="nav-link" href="my-saved-builds">
+        <span class="bi bi-archive-fill-nav-menu" aria-hidden="true"></span> My Saved Builds
+    </NavLink>
+</div>
+    </NotAuthorized>
+</AuthorizeView>
+</CascadingAuthenticationState>

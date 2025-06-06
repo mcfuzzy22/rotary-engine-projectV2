@@ -1,0 +1,342 @@
+@page "/partdetail/{PartId:int}"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+@using Microsoft.Extensions.Logging
+@using rotaryproject.Data
+@using rotaryproject.Data.Models
+@using Microsoft.EntityFrameworkCore
+
+@inject RotaryEngineDbContext DbContext
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<PartDetailPage> Logger
+<ErrorBoundary>
+    <ChildContent>
+<h3>Part :</h3>
+    
+@if (isLoading)
+{
+    <p>STATE: isLoading is true. PartId: @PartId</p>
+}
+else if (notFound)
+{
+    <p>STATE: notFound is true. PartId: @PartId</p>
+}
+@* ... other @if conditions for isLoading / notFound ... *@
+else if (part != null)
+{
+    <div class="container mt-3"> @* Added a container for better spacing/layout *@
+        
+        @* 1. CATEGORY NAME *@
+        @if (part.Category != null)
+        {
+            <h5 class="text-muted mb-2">Category: @part.Category.Name</h5>
+        }
+        else
+        {
+            <h5 class="text-muted mb-2">Category: N/A</h5>
+        }
+
+        @* 2. PART NAME (as main heading) *@
+        <h1>@part.Name</h1>
+        <hr class="mt-1 mb-3"/>
+
+        @* 3. PART DESCRIPTION *@
+        @if (!string.IsNullOrWhiteSpace(part.Description))
+        {
+            <p class="lead">@part.Description</p>
+        }
+        else
+        {
+            <p class="text-muted"><em>No detailed description available for this part.</em></p>
+        }
+        <br />
+
+        @* 4. THE 3D MODEL VIEWER *@
+        <div class="mb-4"> @* Added margin bottom for spacing *@
+            <dt class="col-sm-3">Image Preview</dt>
+        <dd class="col-sm-9">
+            @if (!string.IsNullOrWhiteSpace(part.ImagePath))
+            {
+                <img src="@part.ImagePath" alt="Image of @part.Name" class="img-fluid rounded border" style="max-height: 400px; max-width: 100%; object-fit: contain;"
+                     onerror="this.onerror=null; this.src='https://placehold.co/600x400/e1e1e1/777?text=Image+Not+Found'; this.alt='Image not found';" />
+            }
+            else
+            {
+                <img src="https://placehold.co/600x400/e1e1e1/777?text=No+Image+Available" alt="No image available" class="img-fluid rounded border" style="max-height: 400px; max-width: 100%;" />
+            }
+        </dd>
+        </div>
+        
+        @* OTHER DETAILS (SKU, Price, etc.) *@
+        <div class="mt-4">
+            <h4>Additional Details:</h4>
+            <dl class="row">
+                <dt class="col-sm-3">SKU</dt>
+                <dd class="col-sm-9">@(part.Sku ?? "N/A")</dd> @* Ensure 'Sku' casing matches your Part.cs *@
+
+                <dt class="col-sm-3">Base Price</dt>
+                <dd class="col-sm-9">@(part.BasePrice?.ToString("C") ?? "N/A")</dd>
+
+                @* You can add other fields from your Part model here if needed *@
+                @* For debugging purposes, you might want to keep these temporarily:
+                <dt class="col-sm-3">Model Path (debug)</dt>
+                <dd class="col-sm-9">@part.ModelPath</dd>
+                <dt class="col-sm-3">Image Path (debug)</dt>
+                <dd class="col-sm-9">@(part.ImagePath ?? "N/A")</dd>
+                *@
+            </dl>
+        </div>
+
+    </div>
+}
+// ... rest of the page ...
+else
+{
+    <p>STATE: ERROR - part is NULL, not loading, and not 'notFound'. PartId: @PartId</p>
+}
+    </ChildContent>
+    <ErrorContent Context="ex"> @* This displays if an error is caught in ChildContent *@
+        <div class="blazor-error-boundary" style="background: #fff0f0; border: 1px solid red; padding: 1rem; color: black;">
+            <h3 style="color: red;">ERROR DISPLAYING PART DETAIL PAGE!</h3>
+            <p>An unhandled C# exception has occurred in this component's render logic or lifecycle.</p>
+            <p><strong>Error Message:</strong> <span style="color:red;">@ex.Message</span></p>
+            <hr />
+            <p><strong>Stack Trace (for debugging):</strong></p>
+            <pre style="white-space: pre-wrap; word-break: break-all; background: #f8f8f8; border: 1px solid #eee; padding: 0.5rem;">@ex.StackTrace</pre>
+        </div>
+    </ErrorContent>
+</ErrorBoundary>
+@code {
+    [Parameter]
+    public int PartId { get; set; }
+
+    private Part? part;
+    private bool isLoading = true;
+    private bool notFound = false;
+   private string viewerCanvasId = $"babylon-canvas-{Guid.NewGuid()}";
+    private bool _isEngineInitialized = false;
+    private string? _currentLoadedModelPath;
+    
+        protected override async Task OnInitializedAsync()
+    {
+        Console.WriteLine($"PartDetailPage ({PartId}): OnInitializedAsync - ENTERED.");
+        try
+        {
+            await base.OnInitializedAsync();
+            // Any other component-specific initialization logic NOT dependent on parameters would go here.
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): EXCEPTION in OnInitializedAsync: {ex.ToString()}");
+            // Consider setting an error state here to display to the user
+            isLoading = false; // Ensure isLoading is false so the error message might show
+            notFound = true;   // Or use a dedicated error message property
+            // errorMessage = $"Critical error during initialization: {ex.Message}";
+        }
+        Console.WriteLine($"PartDetailPage ({PartId}): OnInitializedAsync - EXITED.");
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Console.WriteLine($"PartDetailPage ({PartId}): OnParametersSetAsync - ENTERED.");
+        isLoading = true;
+        notFound = false;
+        // part = null; // Let's load into a new variable first to compare
+        string? previousModelPath = _currentLoadedModelPath;
+
+        Console.WriteLine($"PartDetailPage ({PartId}): Loading data for PartId {PartId}");
+        Part? loadedPart = null; // Use a local variable for the fetch
+        try
+        {
+            if (DbContext.Parts != null && PartId > 0)
+            {
+                loadedPart = await DbContext.Parts
+                                    .Include(p => p.Category)
+                                    .FirstOrDefaultAsync(p => p.PartId == PartId); // Ensure p.PartId matches your Part.cs
+
+                if (loadedPart == null)
+                {
+                    Console.WriteLine($"PartDetailPage ({PartId}): PartId {PartId} not found in database.");
+                    notFound = true;
+                }
+                else
+                {
+                    Console.WriteLine($"PartDetailPage ({PartId}): Part '{loadedPart.Name}' loaded. ModelPath: '{loadedPart.ModelPath}'");
+                }
+            }
+            else if (PartId <= 0)
+            {
+                Console.WriteLine($"PartDetailPage ({PartId}): Invalid PartId {PartId} from route.");
+                notFound = true;
+            }
+            else
+            {
+                Console.WriteLine($"PartDetailPage ({PartId}): Error: Parts DbSet is null.");
+                notFound = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): EXCEPTION in OnParametersSetAsync data loading: {ex.ToString()}");
+            notFound = true;
+            loadedPart = null; // Ensure part is null if data loading fails
+        }
+        finally
+        {
+            isLoading = false; // Must be set false so UI can update from loading state
+        }
+
+        bool modelPathActuallyChanged = (this.part?.ModelPath != loadedPart?.ModelPath);
+        bool partIdActuallyChanged = (this.part?.PartId != loadedPart?.PartId);
+
+        this.part = loadedPart; // Now assign to the component's part field
+
+        // Only try to reload the model if the engine is already up AND the part changed meaningfully for the model
+        if (_isEngineInitialized && this.part != null && !string.IsNullOrEmpty(this.part.ModelPath) && (partIdActuallyChanged || modelPathActuallyChanged))
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): OnParametersSetAsync - Engine initialized and model/part changed. Attempting to reload model: {this.part.ModelPath}");
+            await SafeLoadModel(this.part.ModelPath);
+        }
+        else if (_isEngineInitialized && this.part == null && _currentLoadedModelPath != null) // Part became null, clear model
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): OnParametersSetAsync - Part is now null, clearing previous model.");
+            await SafeLoadModel(null);
+        }
+        Console.WriteLine($"PartDetailPage ({PartId}): OnParametersSetAsync - EXITED.");
+    }
+
+    // In @code block of PartDetailPage.razor
+protected override void OnAfterRender(bool firstRender)
+    {
+        // This is the synchronous version. It's called just before OnAfterRenderAsync.
+        Logger.LogInformation("PartDetailPage ({PartId}): OnAfterRender (SYNC) called. firstRender = {FirstRender}", PartId, firstRender);
+        base.OnAfterRender(firstRender); // Call base method
+    }
+
+    // Keep your existing OnAfterRenderAsync with its detailed Console.WriteLine logging as well
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Using Console.WriteLine here for consistency with previous logs, 
+        // but you could switch these to Logger.LogInformation too.
+        Console.WriteLine($"PartDetailPage ({PartId}): OnAfterRenderAsync - ENTERED. firstRender = {firstRender}, isLoading = {isLoading}, part is null = {(part == null)}, _isEngineInitialized = {_isEngineInitialized}");
+        Logger.LogInformation("PartDetailPage ({PartId}): OnAfterRenderAsync (ASYNC) - ENTERED. firstRender = {FirstRender}", PartId, firstRender); // Added Logger here too
+
+        if (firstRender)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): (firstRender = true) - Attempting to initialize 3D viewer for canvas '{viewerCanvasId}'.");
+            Logger.LogInformation("PartDetailPage ({PartId}): OnAfterRenderAsync - Attempting to init 3D viewer (firstRender=true)", PartId);
+            try
+            {
+                // ... (your existing JS interop calls for init and loadModel) ...
+                Console.WriteLine($"PartDetailPage ({PartId}): About to call JSRuntime for 'blazorModelViewer.init'.");
+                _isEngineInitialized = await JSRuntime.InvokeAsync<bool>("blazorModelViewer.init", viewerCanvasId);
+                Console.WriteLine($"PartDetailPage ({PartId}): JS 'blazorModelViewer.init' returned: {_isEngineInitialized}");
+                Logger.LogInformation("PartDetailPage ({PartId}): JS 'blazorModelViewer.init' returned: {IsEngineInitialized}", PartId, _isEngineInitialized);
+
+
+                if (_isEngineInitialized && part != null && !string.IsNullOrEmpty(part.ModelPath))
+                {
+                    Console.WriteLine($"PartDetailPage ({PartId}): Initial model load for: {part.ModelPath}");
+                    Logger.LogInformation("PartDetailPage ({PartId}): Initial model load for: {ModelPath}", PartId, part.ModelPath);
+                    await SafeLoadModel(part.ModelPath);
+                }
+                // ... (rest of the try-catch) ...
+            StateHasChanged();
+            Console.WriteLine($"PartDetailPage ({PartId}): StateHasChanged() called after initial model load attempt in firstRender.");
+            Logger.LogInformation("PartDetailPage ({PartId}): StateHasChanged() called after initial model load attempt in firstRender.", PartId);
+
+            }
+            catch (Exception ex_afterrender_init)
+            {
+                Console.WriteLine($"PartDetailPage ({PartId}): EXCEPTION IN OnAfterRenderAsync (firstRender init block): {ex_afterrender_init.ToString()}");
+                Logger.LogError(ex_afterrender_init, "PartDetailPage ({PartId}): EXCEPTION IN OnAfterRenderAsync (firstRender init block)", PartId);
+                await SetModelError($"JS Interop Error during 3D init: {ex_afterrender_init.Message}");
+            }
+        }
+        Console.WriteLine($"PartDetailPage ({PartId}): OnAfterRenderAsync - EXITED.");
+        Logger.LogInformation("PartDetailPage ({PartId}): OnAfterRenderAsync (ASYNC) - EXITED.", PartId);
+    }
+
+    private void HandleClick()
+{
+    Console.WriteLine($"PartDetailPage ({PartId}): HandleClick method was EXECUTED!");
+    // Logger.LogInformation("PartDetailPage ({PartId}): HandleClick called!", PartId); // Keep if ILogger is injected and preferred
+}    private async Task SafeLoadModel(string? modelPath)
+    {
+        // ... (SafeLoadModel function as provided before)
+        if (!_isEngineInitialized)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): SafeLoadModel - Engine not initialized, cannot load model '{modelPath}'.");
+            await SetModelError("3D viewer not ready.");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(modelPath))
+        {
+             Console.WriteLine($"PartDetailPage ({PartId}): SafeLoadModel - Received null/empty modelPath, attempting to clear model.");
+             _currentLoadedModelPath = null;
+        }
+        else if (_currentLoadedModelPath == modelPath && modelPath != null) // Check modelPath not null here
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): SafeLoadModel - Model '{modelPath}' is already the current one.");
+            return;
+        }
+        
+        _currentLoadedModelPath = modelPath;
+        Console.WriteLine($"PartDetailPage ({PartId}): About to call JSRuntime for 'blazorModelViewer.loadModel' with path: {modelPath ?? "null (clearing model)"}");
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("blazorModelViewer.loadModel", modelPath);
+            Console.WriteLine($"PartDetailPage ({PartId}): JS 'blazorModelViewer.loadModel' call completed for path: {modelPath ?? "null"}");
+            if (!string.IsNullOrEmpty(modelPath)) { await SetModelError(null); }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): EXCEPTION during 'blazorModelViewer.loadModel' for path '{modelPath}': {ex.ToString()}");
+            await SetModelError($"JS Interop Error loading model: {ex.Message}");
+            // If load failed, should we reset _currentLoadedModelPath so a retry is possible?
+            // Or assume it will be retried if parameters change. For now, leave it.
+        }
+    }
+
+    private async Task SetModelError(string? message)
+    {
+        // ... (SetModelError function as provided before)
+        try
+        {
+            string jsMessage = message?.Replace("'", "\\'")?.Replace("\r", "\\r")?.Replace("\n", "\\n") ?? "";
+            await JSRuntime.InvokeVoidAsync("eval", $"document.getElementById('modelError').innerText = '{jsMessage}';");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): Error setting modelError P tag via JS: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        Console.WriteLine($"PartDetailPage ({PartId}): DisposeAsync - ENTERED. Cleaning up 3D viewer.");
+        try
+        {
+            if (_isEngineInitialized)
+            {
+                Console.WriteLine($"PartDetailPage ({PartId}): Calling JS 'blazorModelViewer.dispose'.");
+                await JSRuntime.InvokeVoidAsync("blazorModelViewer.dispose");
+                _isEngineInitialized = false;
+                _currentLoadedModelPath = null;
+                 Console.WriteLine($"PartDetailPage ({PartId}): JS 'blazorModelViewer.dispose' call completed.");
+            }
+        }
+        catch (JSDisconnectedException jsex)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): JSDisconnectedException during dispose: {jsex.Message}.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"PartDetailPage ({PartId}): EXCEPTION during DisposeAsync: {ex.ToString()}");
+        }
+        Console.WriteLine($"PartDetailPage ({PartId}): DisposeAsync - EXITED.");
+    }
+}
