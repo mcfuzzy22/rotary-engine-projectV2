@@ -1,25 +1,23 @@
-// In EngineBuildConfiguration.cs
-using rotaryproject.Data.Models; // Your namespace for the Part model
+using rotaryproject.Data.Models;
 using System.Collections.Generic;
-using rotaryproject.Data;
-namespace rotaryproject.Data // Or your preferred namespace for ViewModels
+using System.Linq;
+
+namespace rotaryproject.Data
 {
+    /// <summary>
+    /// A simple data container for the current build state.
+    /// The business logic has been moved to EngineBuildStateService.
+    /// </summary>
     public class EngineBuildConfiguration
     {
         // Key: CategoryID, Value: The selected Part object
-        public Dictionary<int, Part?> SelectedParts { get; set; }
+        public Dictionary<int, Part?> SelectedParts { get; set; } = new Dictionary<int, Part?>();
 
-        // You can add other properties later, e.g.:
+        // These properties are now set by the service, not calculated here.
         public decimal TotalPrice { get; set; }
-        // public List<string> CompatibilityIssues { get; set; } = new List<string>();
-        // public EngineOverallStats? CalculatedStats { get; set; }
-
-        public EngineBuildConfiguration()
-        {
-            SelectedParts = new Dictionary<int, Part?>();
-        }
-
-        // Optional: Method to add or update a selected part
+        public List<string> CompatibilityIssues { get; set; } = new List<string>();
+        public string? DeterminedEngineFamily { get; set; }
+        public int? DeterminedEngineFamilyId { get; set; } // Store the ID for easier lookups
         public void SelectPart(int categoryId, Part? part)
         {
             if (part == null)
@@ -30,10 +28,8 @@ namespace rotaryproject.Data // Or your preferred namespace for ViewModels
             {
                 SelectedParts[categoryId] = part;
             }
-            // TODO: Trigger re-calculation of stats and compatibility here
         }
 
-        // Optional: Method to get a selected part
         public Part? GetSelectedPartForCategory(int categoryId)
         {
             SelectedParts.TryGetValue(categoryId, out Part? part);

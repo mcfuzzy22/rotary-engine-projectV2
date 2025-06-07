@@ -17,10 +17,34 @@
 
 <h1>Choose Your Engine Parts</h1>
 
-<div class="compatibility-summary my-3 p-3 bg-light border rounded" style="min-height: 50px;">
-    <p class="mb-0"><em>Compatibility and overall stats will appear here. Current Total: @BuildStateService.CurrentBuild.TotalPrice.ToString("C")</em></p>
-</div>
+<div class="compatibility-summary my-3 p-3 border rounded">
+    @if (BuildStateService.CurrentBuild.CompatibilityIssues.Any())
+    {
+        <div class="alert alert-danger">
+            <h5 class="alert-heading">Compatibility Alert!</h5>
+            @foreach (var issue in BuildStateService.CurrentBuild.CompatibilityIssues)
+            {
+                <p class="mb-0">@issue</p>
+            }
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(BuildStateService.CurrentBuild.DeterminedEngineFamily))
+    {
+        <div class="alert alert-success">
+            <p class="mb-0">
+                <span class="oi oi-check me-2" aria-hidden="true"></span>
+                Build is compatible. Determined Engine Family: <strong>@BuildStateService.CurrentBuild.DeterminedEngineFamily</strong>
+            </p>
+        </div>
+    }
+    else
+    {
+         <p class="mb-0 text-muted"><em>Select core components to determine engine family and check compatibility.</em></p>
+    }
 
+    <hr />
+    <h4 class="text-end">Current Total: @BuildStateService.CurrentBuild.TotalPrice.ToString("C")</h4>
+</div>
 @if (isLoading)
 {
     <p><em>Loading categories...</em></p>
@@ -244,232 +268,90 @@ else
 }    protected override async Task OnInitializedAsync()
     {
         isLoading = true;
+        BuildStateService.OnChange += StateHasChanged; // Subscribe to the event
         try
         {
             var allCategories = await DbContext.PartCategories.ToListAsync();
             var categoryLookup = allCategories.ToDictionary(c => c.CategoryId);
-
-            // This prevents issues with Entity Framework's change tracking potentially adding items multiple times.
+            
             foreach (var category in allCategories)
             {
                 category.SubCategories = new List<PartCategory>();
             }
 
             var nonRootCategories = new List<PartCategory>();
-
-            // First, connect all children to their parents and identify all items that are children.
             foreach (var category in allCategories)
             {
                 if (category.ParentCategoryId.HasValue && categoryLookup.TryGetValue(category.ParentCategoryId.Value, out var parentCategory))
                 {
                     parentCategory.SubCategories.Add(category);
-                    nonRootCategories.Add(category); // This is definitely a child category.
+                    nonRootCategories.Add(category);
                 }
             }
-
-            // The top-level categories are all the categories EXCEPT the ones we identified as children.
-            // This logically prevents any child from appearing at the top level.
-            topLevelCategories = allCategories.Except(nonRootCategories)
-                                              .OrderBy(c => c.Name)
-                                              .ToList();
-
-            Console.WriteLine($"Correctly loaded {topLevelCategories.Count} top-level categories.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"EngineBuilderPage: EXCEPTION while loading categories: {ex.ToString()}");
-            topLevelCategories = new List<PartCategory>();
+            
+            topLevelCategories = allCategories.Except(nonRootCategories).OrderBy(c => c.Name).ToList();
         }
         finally
         {
             isLoading = false;
         }
     }
-
-    private async Task SaveCurrentBuild()
+    public void Dispose()
     {
-        saveBuildMessage = null;
-        if (string.IsNullOrWhiteSpace(newBuildName))
+        BuildStateService.OnChange -= StateHasChanged;
+    }
+
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Console.WriteLine($"DEBUG: OnParametersSetAsync fired. PassedCategoryId: {PassedCategoryId}, PassedSelectedPartId: {PassedSelectedPartId}");
+        
+        if (string.IsNullOrWhiteSpace(IncomingBuildConfigurationString) && !PassedSelectedPartId.HasValue)
         {
-            saveBuildMessage = "Please enter a name for your build.";
-            saveBuildSuccess = false;
             return;
         }
 
-        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
+        bool processedAndWillNavigate = false;
 
-        if (user.Identity != null && user.Identity.IsAuthenticated)
+        if (!string.IsNullOrWhiteSpace(IncomingBuildConfigurationString))
         {
-            var applicationUser = await UserManager.GetUserAsync(user);
-            if (applicationUser == null)
+            processedAndWillNavigate = true;
+            Console.WriteLine($"DEBUG: Processing build string: {IncomingBuildConfigurationString}");
+            await BuildStateService.ResetBuild();
+            var categoryPartPairs = IncomingBuildConfigurationString.Split('_');
+            foreach (var pairString in categoryPartPairs)
             {
-                saveBuildMessage = "Error: Could not retrieve user information.";
-                saveBuildSuccess = false;
-                return;
-            }
-
-            if (BuildStateService.CurrentBuild.SelectedParts == null || !BuildStateService.CurrentBuild.SelectedParts.Any())
-            {
-                saveBuildMessage = "There are no parts selected in the current build to save.";
-                saveBuildSuccess = false;
-                return;
-            }
-
-            var buildParts = BuildStateService.CurrentBuild.SelectedParts
-                .Where(kvp => kvp.Value != null)
-                .Select(kvp => $"{kvp.Key}-{kvp.Value!.PartId}");
-            string buildConfigString = string.Join("_", buildParts);
-
-            if (string.IsNullOrEmpty(buildConfigString))
-            {
-                saveBuildMessage = "Cannot save an empty build configuration.";
-                saveBuildSuccess = false;
-                return;
-            }
-
-            var savedBuild = new UserSavedBuild
-            {
-                BuildName = newBuildName,
-                UserId = applicationUser.Id,
-                BuildConfigurationString = buildConfigString,
-                SavedDate = DateTime.UtcNow,
-                LastModifiedDate = DateTime.UtcNow
-            };
-
-            try
-            {
-                DbContext.UserSavedBuilds.Add(savedBuild);
-                await DbContext.SaveChangesAsync();
-                saveBuildMessage = $"Build '{newBuildName}' saved successfully!";
-                saveBuildSuccess = true;
-                newBuildName = string.Empty;
-                Console.WriteLine($"EngineBuilderPage: Build '{savedBuild.BuildName}' saved for user {applicationUser.Email}.");
-            }
-            catch (Exception ex)
-            {
-                saveBuildMessage = "Error saving build to database. Please try again.";
-                saveBuildSuccess = false;
-                Console.WriteLine($"EngineBuilderPage: EXCEPTION saving build: {ex.ToString()}");
-            }
-        }
-        else
-        {
-            saveBuildMessage = "You must be logged in to save a build.";
-            saveBuildSuccess = false;
-        }
-        StateHasChanged();
-    }
-
-    protected override async Task OnParametersSetAsync()
-{
-    // Log entry with current parameter values from the URL
-    Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - ENTERED. " +
-                      $"BuildString: '{IncomingBuildConfigurationString}', " +
-                      $"PassedCatId: {PassedCategoryId}, PassedSelPartId: {PassedSelectedPartId}");
-
-    // Check if this execution is due to our own navigation to clean the URL
-    // If the query parameters that trigger processing are now gone, we assume the state
-    // is already correctly in BuildStateService.CurrentBuild from a previous pass.
-    if (string.IsNullOrWhiteSpace(IncomingBuildConfigurationString) && !PassedSelectedPartId.HasValue)
-    {
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - No new incoming build/selection parameters to process. UI will render from current BuildStateService state.");
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - EXITED (no action needed).");
-        // Ensure UI reflects the current state from the service, especially if it was just populated
-        // StateHasChanged(); // Might be needed if other parts of the page depend on this lifecycle running
-        return;
-    }
-
-    // Flag to indicate if we processed parameters in this cycle and will navigate
-    bool processedAndWillNavigate = false;
-
-    // 1. Process incoming shared build configuration string (e.g., from ?build=1-101_2-205)
-    if (!string.IsNullOrWhiteSpace(IncomingBuildConfigurationString))
-    {
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing build string: {IncomingBuildConfigurationString}");
-        processedAndWillNavigate = true;
-        BuildStateService.CurrentBuild.SelectedParts.Clear(); // Reset for the new build from link
-
-        var categoryPartPairs = IncomingBuildConfigurationString.Split('_');
-        foreach (var pairString in categoryPartPairs)
-        {
-            var ids = pairString.Split('-');
-            if (ids.Length == 2 && int.TryParse(ids[0], out int categoryId) && int.TryParse(ids[1], out int partIdVal))
-            {
-                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Parsed from build string - CategoryId: {categoryId}, PartId: {partIdVal}");
-                if (DbContext.Parts != null)
+                var ids = pairString.Split('-');
+                if (ids.Length == 2 && int.TryParse(ids[0], out int categoryId) && int.TryParse(ids[1], out int partIdVal))
                 {
-                    // Ensure PartId and CategoryId casing matches your Part.cs model in the LINQ query
                     var part = await DbContext.Parts
-                                        .Include(p => p.Category)
-                                        .FirstOrDefaultAsync(p => p.PartId == partIdVal && p.CategoryId == categoryId);
-                    if (part != null)
-                    {
-                        BuildStateService.CurrentBuild.SelectPart(categoryId, part); // Update service state
-                        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Loaded Part '{part.Name}' (ID: {part.PartId}) for CategoryId {categoryId} from build string into service.");
-                    }
-                    else
-                    {
-                        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): PartId {partIdVal} for CategoryId {categoryId} (build string) not found or category mismatch in DB.");
-                    }
+                        .Include(p => p.Fitments).ThenInclude(f => f.EngineFamily)
+                        .FirstOrDefaultAsync(p => p.PartId == partIdVal && p.CategoryId == categoryId);
+                    // *** FIX: Call the service method ***
+                    if (part != null) await BuildStateService.SelectPart(categoryId, part);
                 }
             }
-            else
-            {
-                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Could not parse pair string: '{pairString}' from build string.");
-            }
         }
-    }
-    // 2. Process incoming direct part selection (e.g., from PartSelectionPage)
-    // This runs if no build string was processed in this call.
-    else if (PassedSelectedPartId.HasValue && PassedCategoryId.HasValue)
-    {
-        processedAndWillNavigate = true;
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Processing direct selection - CategoryID: {PassedCategoryId.Value}, PartID: {PassedSelectedPartId.Value}");
-        if (DbContext.Parts != null)
+        else if (PassedSelectedPartId.HasValue && PassedCategoryId.HasValue)
         {
+            processedAndWillNavigate = true;
+            Console.WriteLine($"DEBUG: Processing direct part selection. Part ID: {PassedSelectedPartId.Value}");
             var part = await DbContext.Parts
-                                .Include(p => p.Category)
-                                .FirstOrDefaultAsync(p => p.PartId == PassedSelectedPartId.Value);
-
-            if (part != null && part.CategoryId == PassedCategoryId.Value) // Ensure part belongs to the passed category
+                .Include(p => p.Fitments).ThenInclude(f => f.EngineFamily)
+                .FirstOrDefaultAsync(p => p.PartId == PassedSelectedPartId.Value);
+            if (part != null && part.CategoryId == PassedCategoryId.Value)
             {
-                BuildStateService.CurrentBuild.SelectPart(PassedCategoryId.Value, part); // Update service state
-                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Part '{part.Name}' (ID: {part.PartId}) selected for category {PassedCategoryId.Value} into service.");
-            }
-            else
-            {
-                Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Selected part with ID {PassedSelectedPartId.Value} not found or category mismatch for CategoryId {PassedCategoryId.Value}.");
+                // *** FIX: Call the service method ***
+                await BuildStateService.SelectPart(PassedCategoryId.Value, part);
             }
         }
-        else
+
+        if (processedAndWillNavigate)
         {
-            Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): DbContext.Parts is null. Cannot fetch selected part.");
+            Console.WriteLine("DEBUG: Navigation triggered to clean URL.");
         }
     }
 
-    if (processedAndWillNavigate)
-    {
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): Parameters processed. Updating UI. SelectedParts count in service: {BuildStateService.CurrentBuild.SelectedParts.Count}");
-        // StateHasChanged(); // Not calling StateHasChanged here because Navigation.NavigateTo will cause a re-render.
-                           // The UI will re-render using the updated BuildStateService.CurrentBuild.
-        
-        // await Update3DPreview(); // Call this if you re-add 3D and it needs to update based on service state
-
-        // Clean the URL by removing query parameters.
-        // The component will re-render based on the (now clean) URL and the persisted state in BuildStateService.
-        //Navigation.NavigateTo("/enginebuilder", replace: true);
-        // Note: OnParametersSetAsync will be called again due to this navigation.
-        // The first 'if' condition in this method will handle that re-entry gracefully.
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - EXITED (after processing query parameters and initiating URL clean navigation).");
-    }
-    else
-    {
-        // This path is taken on initial load without query parameters, or after the URL has been cleaned.
-        // The UI will render based on the current state in BuildStateService.CurrentBuild.
-        Console.WriteLine($"EngineBuilderPage ({BuildStateService.CurrentBuild.GetHashCode()}): OnParametersSetAsync - EXITED (no new query parameters to process, UI will render from service state. SelectedParts count: {BuildStateService.CurrentBuild.SelectedParts.Count}).");
-    }
-}
 
     private void SelectOrChangePart(int categoryId)
     {
@@ -522,5 +404,68 @@ else
                 linkCopied = false; // JS interop might fail
             }
         }
+    }
+    private async Task SaveCurrentBuild()
+    {
+        if (string.IsNullOrWhiteSpace(newBuildName))
+        {
+            saveBuildMessage = "Please enter a name for your build.";
+            saveBuildSuccess = false;
+            return;
+        }
+
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var applicationUser = await UserManager.GetUserAsync(user);
+            if (applicationUser == null)
+            {
+                saveBuildMessage = "Error: Could not retrieve user information.";
+                saveBuildSuccess = false;
+                return;
+            }
+
+            var buildParts = BuildStateService.CurrentBuild.SelectedParts.Where(kvp => kvp.Value != null).Select(kvp => $"{kvp.Key}-{kvp.Value!.PartId}");
+            string buildConfigString = string.Join("_", buildParts);
+
+            if (!buildParts.Any())
+            {
+                saveBuildMessage = "Cannot save an empty build.";
+                saveBuildSuccess = false;
+                return;
+            }
+
+            var savedBuild = new UserSavedBuild
+            {
+                BuildName = newBuildName,
+                UserId = applicationUser.Id,
+                BuildConfigurationString = buildConfigString,
+                SavedDate = DateTime.UtcNow,
+                LastModifiedDate = DateTime.UtcNow
+            };
+
+            try
+            {
+                DbContext.UserSavedBuilds.Add(savedBuild);
+                await DbContext.SaveChangesAsync();
+                saveBuildMessage = $"Build '{newBuildName}' saved successfully!";
+                saveBuildSuccess = true;
+                newBuildName = string.Empty;
+            }
+            catch (Exception ex)
+            {
+                saveBuildMessage = "Error saving build to database.";
+                saveBuildSuccess = false;
+                Console.WriteLine($"EngineBuilderPage: EXCEPTION saving build: {ex.ToString()}");
+            }
+        }
+        else
+        {
+            saveBuildMessage = "You must be logged in to save a build.";
+            saveBuildSuccess = false;
+        }
+        StateHasChanged();
     }
 }

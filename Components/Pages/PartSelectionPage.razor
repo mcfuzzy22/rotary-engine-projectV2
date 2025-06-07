@@ -1,15 +1,13 @@
 @page "/selectpart/{CategoryId:int}"
-@rendermode InteractiveServer 
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 
 @inject RotaryEngineDbContext DbContext
 @inject NavigationManager Navigation
+@inject rotaryproject.Services.EngineBuildStateService BuildStateService 
 @using rotaryproject.Data.Models
-@using Microsoft.EntityFrameworkCore
-@using System.Linq.Expressions 
 @using rotaryproject.Data
-@using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.AspNetCore.Components.Routing
-@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+
 <PageTitle>Choose @(currentCategory?.Name ?? "Part")</PageTitle>
 
 @if (isLoading)
@@ -21,11 +19,30 @@ else if (currentCategory != null)
     <div class="container-fluid mt-3">
         <div class="row">
             @* Column for Filters *@
-            <div class="col-md-3 col-lg-2"> @* Adjusted column size for potentially more filters *@
+            <div class="col-md-3 col-lg-2">
                 <h4>Filters</h4>
                 <hr />
 
-                @* --- BRAND FILTER --- *@
+                @* --- NEW: ENGINE FAMILY FILTER --- *@
+                @if (engineFamilyFilterOptions.Any())
+                {
+                    <div class="mb-3">
+                        <h6>Engine Family</h6>
+                        @foreach (var option in engineFamilyFilterOptions)
+                        {
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="family-@option.Id" 
+                                       @bind="option.IsSelected" @bind:after="ApplyFilters" />
+                                <label class="form-check-label" for="family-@option.Id">
+                                    @option.Value
+                                </label>
+                            </div>
+                        }
+                    </div>
+                    <hr />
+                }
+
+                @* --- BRAND FILTER (Your existing code) --- *@
                 @if (brandFilterOptions.Any())
                 {
                     <div class="mb-3">
@@ -44,7 +61,7 @@ else if (currentCategory != null)
                     <hr />
                 }
 
-                @* --- MATERIAL FILTER --- *@
+                @* --- MATERIAL FILTER (Your existing code) --- *@
                 @if (materialFilterOptions.Any())
                 {
                     <div class="mb-3">
@@ -63,8 +80,6 @@ else if (currentCategory != null)
                     <hr />
                 }
                 
-                @* --- Add more filter sections here (e.g., for SizeMm, EngineCompatibility) --- *@
-
                 <button class="btn btn-sm btn-outline-secondary mt-2 w-100" @onclick="ClearFilters">Clear All Filters</button>
             </div>
 
@@ -72,7 +87,6 @@ else if (currentCategory != null)
             <div class="col-md-9 col-lg-10">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h3>Available @currentCategory.Name (@(filteredPartsForCategory?.Count ?? 0) of @(allPartsForCategory?.Count ?? 0) products)</h3>
-                    @* TODO: Add sorting options here later *@
                 </div>
                 <hr />
 
@@ -103,16 +117,8 @@ else if (currentCategory != null)
                                         <ul class="list-unstyled small text-muted mb-1">
                                             @if (!string.IsNullOrEmpty(part.Brand)) { <li><strong>Brand:</strong> @part.Brand</li> }
                                             @if (!string.IsNullOrEmpty(part.Material)) { <li><strong>Material:</strong> @part.Material</li> }
-                                            @if (part.PieceCount.HasValue) { <li><strong>Pieces:</strong> @part.PieceCount</li> }
-                                            @if (!string.IsNullOrEmpty(part.SizeMm)) { <li><strong>Size:</strong> @part.SizeMm</li> }
-                                            @if (part.ManufacturingYear.HasValue) { <li><strong>Year:</strong> @part.ManufacturingYear</li> }
-                                            @if (part.SealAmount.HasValue) { <li><strong>Seal Qty:</strong> @part.SealAmount</li> }
+                                            @* Add other part details here *@
                                         </ul>
-                                        @if (part.Rating.HasValue) { 
-                                            <small class="text-warning">Rating: @part.Rating.Value.ToString("0.0") stars (@(part.RatingCount ?? 0) reviews)</small> 
-                                        } else {
-                                            <small class="text-muted">No rating</small>
-                                        }
                                     </div>
                                     <div class="col-md-3 text-end">
                                         <h4>@(part.BasePrice?.ToString("C") ?? "N/A")</h4>
@@ -145,70 +151,54 @@ else
     [Parameter]
     public int CategoryId { get; set; }
 
-    private List<Part>? allPartsForCategory; // All parts for the category before filtering
-    private List<Part>? filteredPartsForCategory; // Parts after filtering
+    private List<Part> allPartsForCategory = new();
+    private List<Part> filteredPartsForCategory = new();
     private PartCategory? currentCategory;
     private bool isLoading = true;
 
-    // --- Filter related properties and class ---
+    // A single class for all filter types
     public class FilterOption
     {
+        public int Id { get; set; } // Used for EngineFamily ID
         public string Value { get; set; } = string.Empty;
         public bool IsSelected { get; set; }
-        public int Count { get; set; } // How many parts have this option value
+        public int Count { get; set; } 
     }
 
-    private List<FilterOption> brandFilterOptions = new List<FilterOption>();
-    private List<FilterOption> materialFilterOptions = new List<FilterOption>();
-    // Add List<FilterOption> for other properties you want to filter by (e.g., SizeMm, EngineCompatibility)
+    private List<FilterOption> brandFilterOptions = new();
+    private List<FilterOption> materialFilterOptions = new();
+    private List<FilterOption> engineFamilyFilterOptions = new();
 
     protected override async Task OnParametersSetAsync()
     {
-        Console.WriteLine($"PartSelectionPage: OnParametersSetAsync - Loading parts for CategoryId {CategoryId}");
         isLoading = true;
         try
         {
-            if (DbContext.PartCategories != null && DbContext.Parts != null && CategoryId > 0)
+            currentCategory = await DbContext.PartCategories.FindAsync(CategoryId);
+            if (currentCategory != null)
             {
-                currentCategory = await DbContext.PartCategories.FindAsync(CategoryId);
-                if (currentCategory != null)
-                {
-                    allPartsForCategory = await DbContext.Parts
-                                                .Where(p => p.CategoryId == CategoryId)
-                                                .OrderBy(p => p.Name)
-                                                .ToListAsync();
-                    LoadFilterOptions(); // Populate filter options based on all parts in category
-                    ApplyFilters();      // Apply (initially empty) filters to populate filteredPartsForCategory
-                    Console.WriteLine($"PartSelectionPage: Found {allPartsForCategory?.Count ?? 0} total parts for category '{currentCategory.Name}'.");
-                }
-                else { /* ... handle category not found ... */ InitializeEmptyLists(); }
+                // *** UPDATE: Eagerly load Fitments data for filtering ***
+                allPartsForCategory = await DbContext.Parts
+                    .Where(p => p.CategoryId == CategoryId)
+                    .Include(p => p.Fitments) // This is the crucial part
+                    .OrderBy(p => p.Name)
+                    .ToListAsync();
+                
+                await LoadFilterOptions(); // Populate all filter options
+                ApplyFilters();
             }
-            else { /* ... handle invalid CategoryId or DbContext ... */ InitializeEmptyLists(); }
         }
-        catch (Exception ex) { Console.WriteLine($"PartSelectionPage: Error loading: {ex.ToString()}"); InitializeEmptyLists(); }
-        finally { isLoading = false; }
-    }
-
-    private void InitializeEmptyLists()
-    {
-        allPartsForCategory = new List<Part>();
-        filteredPartsForCategory = new List<Part>();
-        brandFilterOptions = new List<FilterOption>();
-        materialFilterOptions = new List<FilterOption>();
-        currentCategory = null;
-    }
-
-    private void LoadFilterOptions()
-    {
-        Console.WriteLine("PartSelectionPage: Loading filter options.");
-        if (allPartsForCategory == null || !allPartsForCategory.Any())
+        finally
         {
-            brandFilterOptions = new List<FilterOption>();
-            materialFilterOptions = new List<FilterOption>();
-            return;
+            isLoading = false;
         }
+    }
+    
+    private async Task LoadFilterOptions()
+    {
+        if (allPartsForCategory == null) return;
 
-        // Brand Filter Options
+        // Brand Filter Options (your existing logic)
         brandFilterOptions = allPartsForCategory
             .Where(p => !string.IsNullOrWhiteSpace(p.Brand))
             .GroupBy(p => p.Brand)
@@ -216,87 +206,79 @@ else
             .OrderBy(fv => fv.Value)
             .ToList();
 
-        // Material Filter Options
+        // Material Filter Options (your existing logic)
         materialFilterOptions = allPartsForCategory
             .Where(p => !string.IsNullOrWhiteSpace(p.Material))
             .GroupBy(p => p.Material)
             .Select(g => new FilterOption { Value = g.Key!, IsSelected = false, Count = g.Count() })
             .OrderBy(fv => fv.Value)
             .ToList();
-        
-        // Add logic here to populate other filter options (e.g., SizeMm, EngineCompatibility)
-        // Example for SizeMm (if you want to filter by distinct sizes):
-        // sizeMmFilterOptions = allPartsForCategory
-        //     .Where(p => !string.IsNullOrWhiteSpace(p.SizeMm))
-        //     .GroupBy(p => p.SizeMm)
-        //     .Select(g => new FilterOption { Value = g.Key!, IsSelected = false, Count = g.Count() })
-        //     .OrderBy(fv => fv.Value)
-        //     .ToList();
-
-        Console.WriteLine($"PartSelectionPage: Loaded {brandFilterOptions.Count} brand options, {materialFilterOptions.Count} material options.");
+            
+        // *** NEW: Engine Family Filter Options ***
+        engineFamilyFilterOptions = await DbContext.EngineFamilies
+            .OrderBy(ef => ef.FamilyCode)
+            .Select(ef => new FilterOption { Id = ef.EngineFamilyId, Value = ef.FamilyCode, IsSelected = false })
+            .ToListAsync();
+            
+        // Pre-select the filter if an engine family is already determined
+        if (BuildStateService.CurrentBuild.DeterminedEngineFamilyId.HasValue)
+        {
+            var determinedId = BuildStateService.CurrentBuild.DeterminedEngineFamilyId.Value;
+            var preselectOption = engineFamilyFilterOptions.FirstOrDefault(o => o.Id == determinedId);
+            if(preselectOption != null)
+            {
+                preselectOption.IsSelected = true;
+            }
+        }
     }
 
     private void ApplyFilters()
     {
-        Console.WriteLine("PartSelectionPage: Applying filters.");
-        if (allPartsForCategory == null)
-        {
-            filteredPartsForCategory = new List<Part>();
-            // StateHasChanged(); // Not strictly needed here as it's called by @onchange or ClearFilters
-            return;
-        }
+        if (allPartsForCategory == null) return;
 
         IEnumerable<Part> query = allPartsForCategory;
 
+        // Apply brand filters
         var selectedBrands = brandFilterOptions.Where(o => o.IsSelected).Select(o => o.Value).ToList();
         if (selectedBrands.Any())
         {
             query = query.Where(p => p.Brand != null && selectedBrands.Contains(p.Brand));
         }
 
+        // Apply material filters
         var selectedMaterials = materialFilterOptions.Where(o => o.IsSelected).Select(o => o.Value).ToList();
         if (selectedMaterials.Any())
         {
             query = query.Where(p => p.Material != null && selectedMaterials.Contains(p.Material));
         }
 
-        // Add more LINQ .Where() clauses here for other active filters
-        // e.g., for SizeMm:
-        // var selectedSizes = sizeMmFilterOptions.Where(o => o.IsSelected).Select(o => o.Value).ToList();
-        // if (selectedSizes.Any())
-        // {
-        //     query = query.Where(p => p.SizeMm != null && selectedSizes.Contains(p.SizeMm));
-        // }
+        // *** NEW: Apply Engine Family filter ***
+        var selectedFamilyIds = engineFamilyFilterOptions.Where(o => o.IsSelected).Select(o => o.Id).ToList();
+        if (selectedFamilyIds.Any())
+        {
+            query = query.Where(part =>
+            {
+                if (!part.Fitments.Any()) return false; // Part must have fitment data to be considered
+                var partFamilyIds = part.Fitments.Select(f => f.EngineFamilyId).ToHashSet();
+                // Part must be compatible with ALL selected families
+                return selectedFamilyIds.All(selectedId => partFamilyIds.Contains(selectedId));
+            });
+        }
 
         filteredPartsForCategory = query.ToList();
-        Console.WriteLine($"PartSelectionPage: After filtering, {filteredPartsForCategory.Count} parts remain.");
-        // StateHasChanged(); // Typically, the @onchange calling this will cause Blazor to re-render.
-                           // If list doesn't update, add StateHasChanged() here.
     }
-
-    // This method is called by @onchange of checkboxes.
-    // It applies filters and ensures the UI re-renders if needed.
-    //private void HandleFilterChange()
-    //{
-        //ApplyFilters();
-        //StateHasChanged(); // Explicitly call StateHasChanged after filters are applied by checkbox change
-    //}/
-
+    
     private void ClearFilters()
     {
-        Console.WriteLine("PartSelectionPage: Clearing all filters.");
         brandFilterOptions.ForEach(o => o.IsSelected = false);
         materialFilterOptions.ForEach(o => o.IsSelected = false);
-        // Reset other filter option lists (e.g., sizeMmFilterOptions.ForEach(o => o.IsSelected = false);)
-        
-        ApplyFilters(); // Re-apply filters (which will now be empty)
-        StateHasChanged(); // Ensure UI updates
+        engineFamilyFilterOptions.ForEach(o => o.IsSelected = false); // Clear new filter
+        ApplyFilters();
     }
 
     private void SelectThisPart(int partId)
     {
-        Console.WriteLine($"PartSelectionPage: PartId {partId} selected for CategoryId {CategoryId}. Navigating back to builder.");
-        Navigation.NavigateTo($"/enginebuilder?passedCategoryId={CategoryId}&passedSelectedPartId={partId}", forceLoad: false);
+        Navigation.NavigateTo($"/enginebuilder?passedCategoryId={CategoryId}&passedSelectedPartId={partId}");
     }
 
     private void GoBackToBuilder()

@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using rotaryproject.Data;
 using rotaryproject.Data.Models; // Ensure ApplicationUser is in this namespace or add its namespace
 using rotaryproject.Services;
-
+using Microsoft.AspNetCore.Components.Authorization;
 // Using statements for ASP.NET Core Identity
 using Microsoft.AspNetCore.Identity;
 
@@ -24,6 +24,7 @@ builder.Services.AddDbContext<RotaryEngineDbContext>(options =>
 
 // 3. Configure ASP.NET Core Identity Services
 // This uses ApplicationUser as your user type and RotaryEngineDbContext for storage.
+
 builder.Services.AddDefaultIdentity<ApplicationUser>(options => {
     // Set to false for simpler setup during development (no email confirmation needed).
     // For production, you'd typically set this to true and configure an email sender.
@@ -45,7 +46,7 @@ builder.Services.AddRazorComponents()
     });
 
 // 5. Your custom services (you already have this)
-builder.Services.AddScoped<rotaryproject.Services.EngineBuildStateService>();
+builder.Services.AddScoped<EngineBuildStateService>();
 builder.Services.AddCascadingAuthenticationState();
 
 // 6. Add services for Razor Pages (needed for the default Identity UI which uses Razor Pages)
