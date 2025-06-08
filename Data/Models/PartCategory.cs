@@ -31,7 +31,7 @@ public partial class PartCategory
 
     // The level of the category in the hierarchy
     public int CategoryLevel { get; set; }
-
+    public bool AllowMultiple { get; set; }
     [InverseProperty("Category")]
     public virtual ICollection<Part> Parts { get; set; } = new List<Part>();
 }

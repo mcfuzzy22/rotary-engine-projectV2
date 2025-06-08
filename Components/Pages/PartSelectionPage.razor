@@ -23,7 +23,7 @@ else if (currentCategory != null)
                 <h4>Filters</h4>
                 <hr />
 
-                @* --- NEW: ENGINE FAMILY FILTER --- *@
+                @* --- ENGINE FAMILY FILTER --- *@
                 @if (engineFamilyFilterOptions.Any())
                 {
                     <div class="mb-3">
@@ -42,7 +42,7 @@ else if (currentCategory != null)
                     <hr />
                 }
 
-                @* --- BRAND FILTER (Your existing code) --- *@
+                @* --- BRAND FILTER --- *@
                 @if (brandFilterOptions.Any())
                 {
                     <div class="mb-3">
@@ -61,7 +61,7 @@ else if (currentCategory != null)
                     <hr />
                 }
 
-                @* --- MATERIAL FILTER (Your existing code) --- *@
+                @* --- MATERIAL FILTER --- *@
                 @if (materialFilterOptions.Any())
                 {
                     <div class="mb-3">
@@ -87,6 +87,15 @@ else if (currentCategory != null)
             <div class="col-md-9 col-lg-10">
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h3>Available @currentCategory.Name (@(filteredPartsForCategory?.Count ?? 0) of @(allPartsForCategory?.Count ?? 0) products)</h3>
+                    
+                    @* --- NEW: SORT BY DROPDOWN --- *@
+                    <div class="col-auto">
+                        <select class="form-select form-select-sm" @bind="selectedSortOption" @bind:after="ApplyFilters">
+                            <option value="default">Sort by Name</option>
+                            <option value="price_asc">Price: Low to High</option>
+                            <option value="price_desc">Price: High to Low</option>
+                        </select>
+                    </div>
                 </div>
                 <hr />
 
@@ -117,7 +126,6 @@ else if (currentCategory != null)
                                         <ul class="list-unstyled small text-muted mb-1">
                                             @if (!string.IsNullOrEmpty(part.Brand)) { <li><strong>Brand:</strong> @part.Brand</li> }
                                             @if (!string.IsNullOrEmpty(part.Material)) { <li><strong>Material:</strong> @part.Material</li> }
-                                            @* Add other part details here *@
                                         </ul>
                                     </div>
                                     <div class="col-md-3 text-end">
@@ -155,11 +163,13 @@ else
     private List<Part> filteredPartsForCategory = new();
     private PartCategory? currentCategory;
     private bool isLoading = true;
+    
+    // --- NEW: Property to hold the selected sort option ---
+    private string selectedSortOption = "default";
 
-    // A single class for all filter types
     public class FilterOption
     {
-        public int Id { get; set; } // Used for EngineFamily ID
+        public int Id { get; set; }
         public string Value { get; set; } = string.Empty;
         public bool IsSelected { get; set; }
         public int Count { get; set; } 
@@ -177,14 +187,12 @@ else
             currentCategory = await DbContext.PartCategories.FindAsync(CategoryId);
             if (currentCategory != null)
             {
-                // *** UPDATE: Eagerly load Fitments data for filtering ***
                 allPartsForCategory = await DbContext.Parts
                     .Where(p => p.CategoryId == CategoryId)
-                    .Include(p => p.Fitments) // This is the crucial part
-                    .OrderBy(p => p.Name)
+                    .Include(p => p.Fitments)
                     .ToListAsync();
                 
-                await LoadFilterOptions(); // Populate all filter options
+                await LoadFilterOptions();
                 ApplyFilters();
             }
         }
@@ -198,7 +206,6 @@ else
     {
         if (allPartsForCategory == null) return;
 
-        // Brand Filter Options (your existing logic)
         brandFilterOptions = allPartsForCategory
             .Where(p => !string.IsNullOrWhiteSpace(p.Brand))
             .GroupBy(p => p.Brand)
@@ -206,7 +213,6 @@ else
             .OrderBy(fv => fv.Value)
             .ToList();
 
-        // Material Filter Options (your existing logic)
         materialFilterOptions = allPartsForCategory
             .Where(p => !string.IsNullOrWhiteSpace(p.Material))
             .GroupBy(p => p.Material)
@@ -214,13 +220,11 @@ else
             .OrderBy(fv => fv.Value)
             .ToList();
             
-        // *** NEW: Engine Family Filter Options ***
         engineFamilyFilterOptions = await DbContext.EngineFamilies
             .OrderBy(ef => ef.FamilyCode)
             .Select(ef => new FilterOption { Id = ef.EngineFamilyId, Value = ef.FamilyCode, IsSelected = false })
             .ToListAsync();
             
-        // Pre-select the filter if an engine family is already determined
         if (BuildStateService.CurrentBuild.DeterminedEngineFamilyId.HasValue)
         {
             var determinedId = BuildStateService.CurrentBuild.DeterminedEngineFamilyId.Value;
@@ -238,31 +242,43 @@ else
 
         IEnumerable<Part> query = allPartsForCategory;
 
-        // Apply brand filters
+        // --- FILTERING LOGIC (same as before) ---
         var selectedBrands = brandFilterOptions.Where(o => o.IsSelected).Select(o => o.Value).ToList();
         if (selectedBrands.Any())
         {
             query = query.Where(p => p.Brand != null && selectedBrands.Contains(p.Brand));
         }
 
-        // Apply material filters
         var selectedMaterials = materialFilterOptions.Where(o => o.IsSelected).Select(o => o.Value).ToList();
         if (selectedMaterials.Any())
         {
             query = query.Where(p => p.Material != null && selectedMaterials.Contains(p.Material));
         }
 
-        // *** NEW: Apply Engine Family filter ***
         var selectedFamilyIds = engineFamilyFilterOptions.Where(o => o.IsSelected).Select(o => o.Id).ToList();
         if (selectedFamilyIds.Any())
         {
             query = query.Where(part =>
             {
-                if (!part.Fitments.Any()) return false; // Part must have fitment data to be considered
+                if (!part.Fitments.Any()) return false;
                 var partFamilyIds = part.Fitments.Select(f => f.EngineFamilyId).ToHashSet();
-                // Part must be compatible with ALL selected families
                 return selectedFamilyIds.All(selectedId => partFamilyIds.Contains(selectedId));
             });
+        }
+        
+        // --- NEW: SORTING LOGIC ---
+        // Apply sorting after all filters have been applied
+        switch (selectedSortOption)
+        {
+            case "price_asc":
+                query = query.OrderBy(p => p.BasePrice);
+                break;
+            case "price_desc":
+                query = query.OrderByDescending(p => p.BasePrice);
+                break;
+            default:
+                 query = query.OrderBy(p => p.Name); // Default sort by name
+                break;
         }
 
         filteredPartsForCategory = query.ToList();
@@ -272,7 +288,7 @@ else
     {
         brandFilterOptions.ForEach(o => o.IsSelected = false);
         materialFilterOptions.ForEach(o => o.IsSelected = false);
-        engineFamilyFilterOptions.ForEach(o => o.IsSelected = false); // Clear new filter
+        engineFamilyFilterOptions.ForEach(o => o.IsSelected = false);
         ApplyFilters();
     }
 
