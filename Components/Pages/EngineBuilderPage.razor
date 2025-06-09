@@ -120,12 +120,14 @@ else
 
                             <tr class="align-middle">
                                 <td style="padding-left: @(level * 25 + 5)px;">
-                                    <strong>@category.Name</strong>
+                                    <a href="/selectpart/@category.CategoryId" class="text-decoration-none text-dark fw-bold">
+                                        @category.Name
+                                    </a>
                                     @if (hasChildren)
                                     {
-                                        <button class="btn btn-sm btn-link p-0 ms-2" @onclick="() => ToggleExpansion(category.CategoryId)">
+                                        <button class="btn btn-sm btn-primary ms-2" @onclick="() => ToggleExpansion(category.CategoryId)">
                                             <span class="oi @(isExpanded ? "oi-minus" : "oi-plus")" aria-hidden="true"></span>
-											Click to Expand Components
+                                            +
                                         </button>
                                     }
                                 </td>
@@ -142,6 +144,7 @@ else
                                                     </div>
                                                     <button class="btn btn-sm btn-outline-danger" @onclick="() => RemovePart(part.CategoryId, part.PartId)">
                                                         <span class="oi oi-x" aria-hidden="true"></span>
+                                                        DELETE
                                                     </button>
                                                 </li>
                                             }
@@ -153,18 +156,18 @@ else
                                     }
                                 </td>
                                 <td class="text-center">
-                                    @if (category.AllowMultiple)
+                                    @if (category.AllowMultiple && level > 0)
                                     {
                                         <button class="btn btn-sm btn-primary" @onclick="() => SelectOrChangePart(category.CategoryId)">
                                             <span class="oi oi-plus me-1"></span> Add @category.Name
                                         </button>
                                         <button class="btn btn-sm btn-primary" @onclick="() => SelectOrChangePart(category.CategoryId)">+ Choose</button>
                                     }
-                                    else if (!BuildStateService.CurrentBuild.SelectedParts.ContainsKey(category.CategoryId))
+                                    else if (!BuildStateService.CurrentBuild.SelectedParts.ContainsKey(category.CategoryId) && level > 0)
                                     {
                                         <button class="btn btn-sm btn-primary" @onclick="() => SelectOrChangePart(category.CategoryId)">+ Choose</button>
                                     }
-                                    else
+                                    else if(level > 0)
                                     {
                                         <div class="btn-group">
                                             <button class="btn btn-sm btn-outline-secondary" @onclick="() => SelectOrChangePart(category.CategoryId)">Change</button>
