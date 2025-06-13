@@ -12,8 +12,8 @@ using rotaryproject.Data;
 namespace rotaryproject.Migrations
 {
     [DbContext(typeof(RotaryEngineDbContext))]
-    [Migration("20250608195601_AddAllowMultipleToPartCategory")]
-    partial class AddAllowMultipleToPartCategory
+    [Migration("20250609184856_init")]
+    partial class init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

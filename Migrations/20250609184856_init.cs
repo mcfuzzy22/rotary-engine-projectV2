@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace rotaryproject.Migrations
 {
     /// <inheritdoc />
-    public partial class compatitiblity1 : Migration
+    public partial class init : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -73,7 +73,8 @@ namespace rotaryproject.Migrations
                     Name = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: false),
                     Description = table.Column<string>(type: "nvarchar(255)", maxLength: 255, nullable: true),
                     ParentCategoryId = table.Column<int>(type: "int", nullable: true),
-                    CategoryLevel = table.Column<int>(type: "int", nullable: false)
+                    CategoryLevel = table.Column<int>(type: "int", nullable: false),
+                    AllowMultiple = table.Column<bool>(type: "bit", nullable: false)
                 },
                 constraints: table =>
                 {

@@ -256,10 +256,10 @@ else
         else if (PassedSelectedPartId.HasValue && PassedCategoryId.HasValue)
         {
             processed = true;
-            var category = topLevelCategories
-                .SelectMany(c => c.SubCategories.Append(c))
-                .FirstOrDefault(c => c.CategoryId == PassedCategoryId.Value);
-
+            //var category = topLevelCategories
+            //    .SelectMany(c => c.SubCategories.Append(c))
+            //    .FirstOrDefault(c => c.CategoryId == PassedCategoryId.Value);
+            var category = FindCategoryById(topLevelCategories, PassedCategoryId.Value);
             var part = await DbContext.Parts.FindAsync(PassedSelectedPartId.Value);
 
             if (part != null && category != null)
@@ -380,6 +380,25 @@ else
             Console.WriteLine($"SaveBuild EXCEPTION: {ex}");
         }
     }
-    
+    private PartCategory? FindCategoryById(IEnumerable<PartCategory> categories, int id)
+    {
+        foreach (var category in categories)
+        {
+            if (category.CategoryId == id)
+            {
+                return category;
+            }
+
+            if (category.SubCategories.Any())
+            {
+                var foundInChild = FindCategoryById(category.SubCategories, id);
+                if (foundInChild != null)
+                {
+                    return foundInChild;
+                }
+            }
+        }
+        return null;
+    }
     public void Dispose() => BuildStateService.OnChange -= StateHasChanged;
 }

@@ -21,7 +21,9 @@ namespace rotaryproject.Data
         public virtual DbSet<UserSavedBuild> UserSavedBuilds { get; set; }
         public virtual DbSet<EngineFamily> EngineFamilies { get; set; }
         public virtual DbSet<PartFitment> PartFitments { get; set; }
-
+        public virtual DbSet<Post> Posts { get; set; }
+        public virtual DbSet<PostRendition> PostRenditions { get; set; }
+        public virtual DbSet<UserFollow> UserFollows { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -57,7 +59,36 @@ namespace rotaryproject.Data
                       .HasForeignKey(d => d.UserId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
+            // --- Social Feature Configurations ---
             
+            // Post and PostRendition relationship
+            modelBuilder.Entity<Post>()
+                .HasOne(p => p.User)
+                .WithMany(u => u.Posts)
+                .HasForeignKey(p => p.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PostRendition>()
+                .HasOne(pr => pr.Post)
+                .WithMany(p => p.Renditions)
+                .HasForeignKey(pr => pr.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // UserFollow (Follower/Following) many-to-many relationship
+            modelBuilder.Entity<UserFollow>()
+                .HasKey(uf => new { uf.FollowerId, uf.FollowingId });
+
+            modelBuilder.Entity<UserFollow>()
+                .HasOne(uf => uf.Follower)
+                .WithMany(u => u.Following)
+                .HasForeignKey(uf => uf.FollowerId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<UserFollow>()
+                .HasOne(uf => uf.Following)
+                .WithMany(u => u.Followers)
+                .HasForeignKey(uf => uf.FollowingId)
+                .OnDelete(DeleteBehavior.Restrict);
             // The redundant configurations for Part and PartCategory have been removed,
             // as they are handled by the attributes in the model files.
         }
